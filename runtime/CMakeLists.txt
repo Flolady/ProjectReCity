@@ -507,6 +507,11 @@ if(BUILD_TESTING)
     add_test(NAME run_tiny_game COMMAND gta6rt --run $<TARGET_FILE:tiny_game> -- hello 42)
     add_test(NAME run_tiny_game_exit_code COMMAND gta6rt --run $<TARGET_FILE:tiny_game> -- wrong args)
     set_tests_properties(run_tiny_game_exit_code PROPERTIES WILL_FAIL TRUE)
+    # Mode flags are exclusive: two of them print the usage before anything is mapped or run.
+    add_test(NAME gta6rt_rejects_two_modes COMMAND gta6rt --dry-run --run $<TARGET_FILE:tiny_game>)
+    add_test(NAME gta6rt_rejects_init_and_run COMMAND gta6rt --init --run $<TARGET_FILE:tiny_game>)
+    set_tests_properties(gta6rt_rejects_two_modes gta6rt_rejects_init_and_run PROPERTIES
+                         PASS_REGULAR_EXPRESSION "usage: gta6rt" FAIL_REGULAR_EXPRESSION "running |module\\(s\\) mapped")
   endif()
   if(WIN32 AND TARGET root_signature_test)
     add_test(NAME root_signature COMMAND root_signature_test)
