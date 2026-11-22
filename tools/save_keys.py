@@ -160,31 +160,40 @@ def read(p):
 INPUT_EXTENSIONS = (".jsav", ".asav", ".json", ".bin")
 
 
-def iter_inputs(paths):
-    """Yield the bytes of every save file (.jsav, .asav, .bin or no extension) or .json found under the given paths."""
+def iter_input_files(paths):
+    """Yield (path, bytes) for every save file (.jsav, .asav, .bin or no extension) or .json under the given paths."""
     for p in paths:
         if os.path.isdir(p):
             for dp, _, fs in os.walk(p):
                 for f in sorted(fs):
                     if f.lower().endswith(INPUT_EXTENSIONS) or "." not in f:
-                        yield read(os.path.join(dp, f))
+                        path = os.path.join(dp, f)
+                        yield path, read(path)
         else:
-            yield read(p)
+            yield p, read(p)
+
+
+def iter_inputs(paths):
+    """Yield the bytes of every save file found under the given paths (see iter_input_files)."""
+    for _, d in iter_input_files(paths):
+        yield d
 
 
 def collect_keys(paths):
     keys = collections.Counter()
-    for d in iter_inputs(paths):
+    for path, d in iter_input_files(paths):
         if d[:4] == b"JSAV":                      # index hashes are block ids too
             # A truncated or lying entry count must not abort a whole batch with a struct.error traceback.
             # Skip only the table: the $0x... text keys below are still readable from the same bytes.
+            # Each warning names its file, so a batch over a saves folder says which save is broken.
             if len(d) < 16:
-                print(f"warning: JSAV header is only {len(d)} bytes; skipping its entry table", file=sys.stderr)
+                print(f"warning: {path}: JSAV header is only {len(d)} bytes; skipping its entry table",
+                      file=sys.stderr)
                 n = 0
             else:
                 n = sum(struct.unpack_from("<II", d, 8))
             if n and 16 + 20 * n > len(d):
-                print(f"warning: JSAV header declares {n} entries but the file has {len(d)} bytes; "
+                print(f"warning: {path}: JSAV header declares {n} entries but the file has {len(d)} bytes; "
                       "skipping its entry table", file=sys.stderr)
                 n = 0
             for i in range(n):

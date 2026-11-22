@@ -143,6 +143,27 @@ class MalformedJsavTest(unittest.TestCase):
         self.assertIn("JSAV header declares 4 entries", err)
         self.assertIn("skipping its entry table", err)
 
+    def test_warning_names_the_file(self):
+        _, err, path = self.collect(self.jsav(4))
+        self.assertIn(path, err)
+        _, err, path = self.collect(b"JSAV" + bytes(4), name="short.jsav")
+        self.assertIn(path, err)
+        self.assertIn("JSAV header is only 8 bytes", err)
+
+    def test_batch_warnings_tell_files_apart(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        for name in ("save1.bin", "save2.bin"):
+            with open(os.path.join(tmp.name, name), "wb") as f:
+                f.write(self.jsav(4))
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            sk.collect_keys([tmp.name])
+        lines = [ln for ln in err.getvalue().splitlines() if ln.startswith("warning:")]
+        self.assertEqual(len(lines), 2)
+        self.assertIn("save1.bin", lines[0])
+        self.assertIn("save2.bin", lines[1])
+
     def test_partial_entry_table_is_skipped(self):
         keys, err, _ = self.collect(self.jsav(1) + bytes(10))
         self.assertEqual(keys, {})
