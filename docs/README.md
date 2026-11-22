@@ -8,6 +8,7 @@ method, scope and caveats. No game data is included.
 
 | Document | What it covers |
 |---|---|
+| [BUILDING.md](BUILDING.md) | Every build option, the stages, wave64, LLVM, Linux and Wine, troubleshooting. |
 | [design.md](design.md) | Overall project design, asset status, translator contract and open blockers. |
 | [related_projects.md](related_projects.md) | Prior art we may read and the licence boundaries on it. |
 | [rpf.md](rpf.md) | RPF9 archive layout, the carve tools and the unreadable encrypted TOC. |

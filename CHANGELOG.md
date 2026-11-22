@@ -2,6 +2,14 @@
 
 What Project ReCity has changed, newest first. The state of every subsystem is in [ROADMAP.md](ROADMAP.md).
 
+## 2026-11-22 — New README and build guide
+
+- The README is rewritten from scratch: a short pitch, a pipeline diagram, a progress table, a three-line quick
+  start, a map of the repository, a FAQ and how to join in. CI badges show the state of `main`.
+- The detailed build instructions moved to a new guide, [docs/BUILDING.md](docs/BUILDING.md): the five stages, every
+  option, wave64, getting an `llvm-mc` with AMDGPU, the runtime build with or without Ninja, Linux and Wine, and
+  troubleshooting.
+
 ## 2026-11-22 — Project ReCity
 
 ### Identity
