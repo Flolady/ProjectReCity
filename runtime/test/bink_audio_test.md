@@ -5,16 +5,16 @@
 one selected track to 16-bit PCM/WAV.
 
 ```sh
-set LEONIDA_GAME_DIR=C:\path\to\package
-set LEONIDA_MOVIE_AUDIO=C:\path\to\stream.bk2
-set LEONIDA_AUDIO_TRACK=0        # optional, default 0
-set LEONIDA_AUDIO_FRAMES=100     # optional, default all frames
-set LEONIDA_RUN_DLLMAIN=1        # optional, not needed
+set RECITY_GAME_DIR=C:\path\to\package
+set RECITY_MOVIE_AUDIO=C:\path\to\stream.bk2
+set RECITY_AUDIO_TRACK=0        # optional, default 0
+set RECITY_AUDIO_FRAMES=100     # optional, default all frames
+set RECITY_RUN_DLLMAIN=1        # optional, not needed
 runtime\build\bink_audio_test.exe
 ```
 
 With either required variable unset it prints `SKIP (no package/audio movie)` and exits 0. Output goes to
-`%TEMP%\leonida_bink_audio`; no movie, packet or PCM is committed.
+`%TEMP%\recity_bink_audio`; no movie, packet or PCM is committed.
 
 ## Measured API shape (1.0.2.1)
 

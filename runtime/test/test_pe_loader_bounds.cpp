@@ -722,9 +722,9 @@ void test_highlow_relocations() {
 int main() {
     std::printf("test_pe_loader_bounds: PE Loader boundary checks, virtual address range wrapping, and import table null termination\n");
 
-    const char* env_dir = std::getenv("LEONIDA_TEST_DIR");
+    const char* env_dir = std::getenv("RECITY_TEST_DIR");
     g_temp_dir = env_dir ? std::filesystem::path(env_dir)
-                         : std::filesystem::temp_directory_path() / "leonida_pe_bounds_test";
+                         : std::filesystem::temp_directory_path() / "recity_pe_bounds_test";
     std::filesystem::create_directories(g_temp_dir);
 
     try {

@@ -75,7 +75,7 @@ two shim DLLs that already exist. `libHttpClient.GDK.dll` and `XCurl.dll` import
 
 The table above has no unimplemented imports, but the game executable will. A call to one used to return 0
 silently, which for an `HRESULT` function is `S_OK` with its out parameters never written; the caller then carries on
-with stale pointers and fails somewhere unrelated. `LEONIDA_UNIMPLEMENTED` chooses what the thunk does instead
+with stale pointers and fails somewhere unrelated. `RECITY_UNIMPLEMENTED` chooses what the thunk does instead
 (details in `runtime/README.md`):
 
 - `log` (default): print the name once, return 0. Unchanged.
@@ -100,7 +100,7 @@ measurement in `d3d12_vulkan.md`, because its page could not be found.
 - It proves the loader parses real Xbox Series PE files, maps their sections, applies no unnecessary relocation,
   walks their import tables, and classifies every thunk.
 - The loader also registers each image's unwind table. `pe_loader_test` checks, for every DLL present in
-  `LEONIDA_GAME_DIR`, that the whole exception directory is registered, that `RtlLookupFunctionEntry` returns
+  `RECITY_GAME_DIR`, that the whole exception directory is registered, that `RtlLookupFunctionEntry` returns
   each entry for its first byte, and that the entry point is covered (directly, or through the `jmp rel32` thunks
   an incrementally linked entry point goes through: a thunk touches no stack, so it has no entry of its own).
   Measured on all 16 DLLs: every table passes the loader's checks and every entry resolves to itself.

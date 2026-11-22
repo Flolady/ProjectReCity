@@ -1,6 +1,6 @@
 // Tests for the native PE loader. Every image here is built byte by byte, so nothing from the game is needed and
-// nothing is read from the repo: the only files written go to a leonida_loader_test folder in the temporary
-// directory, or in LEONIDA_TEST_DIR when that is set (for machines whose security software blocks the images there).
+// nothing is read from the repo: the only files written go to a recity_loader_test folder in the temporary
+// directory, or in RECITY_TEST_DIR when that is set (for machines whose security software blocks the images there).
 //
 // What it pins down: a valid image maps exactly as its headers say, and a truncated or corrupt one is rejected with
 // a message instead of being followed out of bounds. The truncation case covers every length of a valid image.
@@ -737,7 +737,7 @@ void test_unwind_registration() {
     expect_rejects("unwind data past the image", make_unwind_image({{0x1000, 0x1010, 0x1FFE}}));
 }
 
-// The folder the images go to: leonida_loader_test\<process id> in LEONIDA_TEST_DIR when that is set, otherwise in
+// The folder the images go to: recity_loader_test\<process id> in RECITY_TEST_DIR when that is set, otherwise in
 // the temporary directory. A folder per run, because security software can hold the previous run's images for a
 // while after they are written (so they can be neither deleted nor overwritten); the fixed parent name is what an
 // exclusion names.
@@ -745,10 +745,10 @@ std::filesystem::path work_dir() {
     wchar_t* env = nullptr;
     size_t size = 0;
     std::filesystem::path base;
-    if (_wdupenv_s(&env, &size, L"LEONIDA_TEST_DIR") == 0 && env && *env) base = env;
+    if (_wdupenv_s(&env, &size, L"RECITY_TEST_DIR") == 0 && env && *env) base = env;
     std::free(env);
     if (base.empty()) base = std::filesystem::temp_directory_path();
-    return base / "leonida_loader_test" / std::to_string(GetCurrentProcessId());
+    return base / "recity_loader_test" / std::to_string(GetCurrentProcessId());
 }
 
 // Security software can scan each file that looks like an executable as it is written, and hold it while it does:
@@ -802,7 +802,7 @@ int main() {
         if (const std::string why = written_images_blocked(); !why.empty()) {
             std::printf("FAIL  PE images written to %s are not readable straight away: %s.\n"
                         "      Security software that scans newly written executable files does this. Exclude %s\n"
-                        "      from scanning, or set LEONIDA_TEST_DIR to a folder it does not scan.\n",
+                        "      from scanning, or set RECITY_TEST_DIR to a folder it does not scan.\n",
                         g_dir.string().c_str(), why.c_str(), g_dir.parent_path().string().c_str());
             std::filesystem::remove_all(g_dir, ec);
             return 1;

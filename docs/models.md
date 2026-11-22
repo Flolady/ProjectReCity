@@ -10,7 +10,7 @@ dropped valid models in three validation paths, all in `third_party/rpf9-explore
 
 ## Upstream status
 
-[Leonida issue #29](https://github.com/ItsNotRexed/Leonida/issues/29) tracks this work. The decoder
+[ROADMAP.md](../ROADMAP.md) tracks this work. The decoder
 fix in [rpf9-explorer PR #1](https://github.com/breadbbbb/rpf9-explorer/pull/1) is merged, and
 `third_party/rpf9-explorer` is pinned at upstream `917e9b9` (was `48557ea`). The later upstream
 commits add the `packs.rpf` drawable-dictionary roots (one drawable per entry), the TTPF
@@ -19,7 +19,7 @@ pre-pin measurements as the control and records the new pin's `packs.rpf` count 
 a competing patch.
 
 PR #1 reports 190,792 of 190,792 recognized candidates across the ten archives configured in
-Leonida, including 169 previously rejected candidates (also verified after archive readback). A
+ReCity, including 169 previously rejected candidates (also verified after archive readback). A
 later full-archive run at the same head independently reproduced the ten-archive total: 190,792
 candidates, 190,792 recovered, read back and decoded, 0 decode or readback failures, no duplicate
 model names, and 2.22 billion triangles (the pre-fix export was 155,598 models / 1.95 billion

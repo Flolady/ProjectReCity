@@ -17,7 +17,7 @@
 //   8. the original index is removed: the fallback.
 // This runs with the descriptor-indexing flags the device has (update after bind, partially bound) and again
 // without any. Exit 77 with "unsupported: ..." when the device lacks a feature the shaders need.
-// LEONIDA_VK_VALIDATION=1 runs under VK_LAYER_KHRONOS_validation; a validation error fails the test.
+// RECITY_VK_VALIDATION=1 runs under VK_LAYER_KHRONOS_validation; a validation error fails the test.
 #define VK_NO_PROTOTYPES
 #include "vulkan_loader.h"
 #include "../src/vulkan_bindless.h"
@@ -49,7 +49,7 @@
 
 namespace {
 
-using namespace leonida;
+using namespace recity;
 
 constexpr int unsupported = 77;
 unsigned g_validation_errors = 0;
@@ -107,7 +107,7 @@ int main(int argc, char** argv) {
 #define LI(n) const auto n = reinterpret_cast<PFN_##n>(gipa(inst, #n))
     LI(vkCreateInstance);
     LI(vkEnumerateInstanceLayerProperties);
-    const char* env = std::getenv("LEONIDA_VK_VALIDATION");
+    const char* env = std::getenv("RECITY_VK_VALIDATION");
     const bool validation = env && std::strcmp(env, "0") != 0;
     const char* layer = "VK_LAYER_KHRONOS_validation";
     const char* debug_utils = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
@@ -127,7 +127,7 @@ int main(int argc, char** argv) {
         bool found = false;
         for (const auto& properties : layers) found = found || std::strcmp(properties.layerName, layer) == 0;
         if (!found) {
-            std::fprintf(stderr, "LEONIDA_VK_VALIDATION is set but %s is not installed\n", layer);
+            std::fprintf(stderr, "RECITY_VK_VALIDATION is set but %s is not installed\n", layer);
             return 1;
         }
         ici.pNext = &messenger_info;

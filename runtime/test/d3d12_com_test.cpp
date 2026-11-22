@@ -1,7 +1,7 @@
 // End to end through the D3D12 COM surface: an ID3D12GraphicsCommandList7 records clears (whole and rectangles),
 // legacy and enhanced barriers; an ID3D12CommandQueue executes it on Vulkan behind a queue Wait on a fence the CPU
 // signals later; an ID3D12Fence1 event reports completion; the images are read back. No shaders or game data.
-// Set LEONIDA_VK_VALIDATION=1 to run under VK_LAYER_KHRONOS_validation; any validation error fails the test.
+// Set RECITY_VK_VALIDATION=1 to run under VK_LAYER_KHRONOS_validation; any validation error fails the test.
 #include "vk_test_device.h"
 #include "../shims/d3d12_com.h"
 #include "../shims/d3d12_trace.h"
@@ -31,7 +31,7 @@ struct Ref {
 int main(int argc, char** argv) {
     if (argc == 2 && std::strcmp(argv[1], "--trace-d3d12") == 0) rt::d3d12_trace::set_enabled(true);
     else if (argc != 1) return 2;
-    using namespace leonida;
+    using namespace recity;
     vktest::Device d;
     EXPECT(d.create());
     VulkanContext context(d.device_proc, d.device, true);

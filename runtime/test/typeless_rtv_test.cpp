@@ -30,8 +30,8 @@ VKAPI_ATTR void VKAPI_CALL attachments(VkCommandBuffer, std::uint32_t n, const V
     std::uint32_t count, const VkClearRect* rects) {
     if (n == 1 && count == 1) { captured = values[0].clearValue.color; captured_rect = rects[0]; ++attachment_clears; }
 }
-leonida::ReplayFunctions functions() {
-    leonida::ReplayFunctions vk{};
+recity::ReplayFunctions functions() {
+    recity::ReplayFunctions vk{};
     vk.pipeline_barrier = barrier;
     vk.clear_color_image = clear;
     vk.begin_rendering = begin;
@@ -44,8 +44,8 @@ leonida::ReplayFunctions functions() {
     };
     return vk;
 }
-leonida::ResourceBinding resource() {
-    leonida::ResourceBinding r{};
+recity::ResourceBinding resource() {
+    recity::ResourceBinding r{};
     r.image = reinterpret_cast<VkImage>(std::uintptr_t{1});
     r.format = VK_FORMAT_R8G8B8A8_UNORM;
     r.width = 5; r.height = 3;
@@ -58,15 +58,15 @@ void reset_counters() {
     captured = {}; captured_rect = {}; render_area = {};
     requested_range = {}; rendering_layers = 0;
 }
-leonida::ReplayResult run(const leonida::CommandList& list, const leonida::ResourceBinding& resource,
-                          const leonida::ReplayFunctions& vk) {
+recity::ReplayResult run(const recity::CommandList& list, const recity::ResourceBinding& resource,
+                          const recity::ReplayFunctions& vk) {
     reset_counters();
-    return leonida::replay(list, VK_NULL_HANDLE, [&](auto) { return &resource; }, vk);
+    return recity::replay(list, VK_NULL_HANDLE, [&](auto) { return &resource; }, vk);
 }
 } // namespace
 
 int main() {
-    using namespace leonida;
+    using namespace recity;
     const auto vk = functions();
     const auto binding = resource();
     const ClearColor color{1.5f, 2.5f, 256, -1};

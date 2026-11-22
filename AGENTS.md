@@ -25,11 +25,10 @@ loader that maps the game's executable and resolves its imports to shims. Nothin
 ## Claim before you start
 
 - Work is claimed in the coordination issue before a pull request is opened: the open issue titled "Coordinating
-  who works on what". It moves to a new issue when the thread gets long, so look it up instead of using an old
-  number:
+  who works on what" (#1 today; if it moves to a new issue, look it up instead of using an old number):
 
   ```sh
-  gh issue list -R ItsNotRexed/Leonida --state open --search "Coordinating who works on what in:title"
+  gh issue list -R pixl27/ProjectReCity --state open --search "Coordinating who works on what in:title"
   ```
 
   Check its tables and the open pull requests first. If someone has claimed the item or has a pull request for it,
@@ -39,8 +38,8 @@ loader that maps the game's executable and resolves its imports to shims. Nothin
   Post it in the coordination issue as `finding: <one line>`, followed by where it is (file and line), why it matters,
   and whether it needs game files or particular hardware. The coordinator checks it and lists it for others.
 - For the D3D12 → Vulkan layer (`runtime/shims/d3d12_*`, `runtime/src/vulkan_*`), also read
-  [#313](https://github.com/ItsNotRexed/Leonida/issues/313): most of that work builds on a few open pull requests,
-  and it lists which D3D12 methods are still open.
+  the D3D12 section of [ROADMAP.md](ROADMAP.md) and [docs/d3d12_vulkan.md](docs/d3d12_vulkan.md): they list the
+  critical path and which D3D12 methods are still open.
 
 ## Before you guess, look
 
@@ -57,6 +56,15 @@ python -m compileall -q make_game.py tools tests
 python -I make_game.py --help
 dotnet build tools/rpf9dump/rpf9dump.csproj -c Release
 cmake -S runtime -B runtime/build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo; cmake --build runtime/build
+```
+
+Without Ninja on Windows, the Visual Studio generator works the same (from Git Bash, set `MSYS_NO_PATHCONV=1` so
+MSBuild's `/flags` are not rewritten as paths):
+
+```powershell
+cmake -S runtime -B runtime/build -G "Visual Studio 17 2022" -A x64
+cmake --build runtime/build --config RelWithDebInfo --parallel
+ctest --test-dir runtime/build -C RelWithDebInfo --output-on-failure
 ```
 
 With a work folder already built, a translator change is checked on a slice before the full run, and the result is

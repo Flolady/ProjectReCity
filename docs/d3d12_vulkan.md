@@ -2,7 +2,7 @@
 
 **Status: in progress. A Vulkan-backed `ID3D12Device` (queues, allocators, command lists, fences, descriptor heaps,
 render-target and depth views, texture views and samplers, committed and reserved buffers, 2D textures and 3D texture transfers and color clears, and query heaps)
-runs behind the Xbox-ABI device proxy (section 3.2). `D3D12XboxCreateDevice` uses it when `LEONIDA_D3D12=vulkan` is
+runs behind the Xbox-ABI device proxy (section 3.2). `D3D12XboxCreateDevice` uses it when `RECITY_D3D12=vulkan` is
 set and the host PC device otherwise. Buffer views, root signatures, PSOs, draws and the swapchain are not
 implemented.** This is the plan for replacing the console's
 `d3d12_xs.dll` with an implementation that records D3D12 commands and replays them on Vulkan, while producing
@@ -429,7 +429,7 @@ CPU tests:
   decoding refuses and ignores, the T#s the image test shaders build, sampler words as radv writes them, and the
   format table. `tests/test_gfx10_descriptors.py` compares that table with `tools/gfx10_formats.json`.
 
-The GPU tests read their results back. With `LEONIDA_VK_VALIDATION=1` they run under `VK_LAYER_KHRONOS_validation`,
+The GPU tests read their results back. With `RECITY_VK_VALIDATION=1` they run under `VK_LAYER_KHRONOS_validation`,
 and any validation error fails them.
 - `vk_command_replay_test`, part A: only Vulkan 1.0 functions and no tracker.
 - `vk_command_replay_test`, part B: rectangle clears, a depth clear while the stencil plane is read-only, a promoted
@@ -470,9 +470,9 @@ and any validation error fails them.
   round trip and a buffer region. A 4x multisampled render target is cleared through a `TEXTURE2DMS` view and
   resolved into a texture that is read back; the multisampled shapes D3D12 refuses are refused, and so is a
   resolve from a single-sampled texture. `GetCopyableFootprints` is compared with the PC runtime's, and a short
-  run repeats on a standalone device, the path `LEONIDA_D3D12=vulkan` takes.
+  run repeats on a standalone device, the path `RECITY_D3D12=vulkan` takes.
   The comparison tests run against a PC D3D12 device: the default adapter, or the one named by
-  `LEONIDA_HOST_ADAPTER` (`warp`, or part of an adapter's name; the adapter used is printed). Some answers are the
+  `RECITY_HOST_ADAPTER` (`warp`, or part of an adapter's name; the adapter used is printed). Some answers are the
   driver's choice, so pick the host side when two adapters disagree: `GetResourceTiling` splits standard and packed
   mips differently on an NVIDIA, an AMD and a WARP host, and the test accepts any split.
   - Copies against the host (D3D-46, `d3d12_copy_compare.h`): the same scenario runs on the layer and on the host and
@@ -512,7 +512,7 @@ and any validation error fails them.
     - On a GPU with D24, a readback leaves the unspecified `X8` byte of the depth plane untouched where the PC
       runtime writes 0; the comparison ignores it.
     A PC driver's copy flushes denormal float depth to zero, so the test keeps its values normal. A
-    `LEONIDA_HOST_ADAPTER` that matches no adapter fails the run instead of skipping the comparisons.
+    `RECITY_HOST_ADAPTER` that matches no adapter fails the run instead of skipping the comparisons.
 - `d3d12_method_variants_test`: each variant against the method it wraps, on the device directly (the proxy's
   slot 76 is the Xbox texture method, not `CreateCommittedResource3`). It runs 12 creation cases (buffers on the
   three heap types, textures, a volume, a multisampled target, and three shapes the base refuses) through every
@@ -607,11 +607,11 @@ uses an image VA as a raw pointer.
   arena either: it is a normal storage buffer in `DEVICE_LOCAL` memory, uploaded from a mapped staging copy before
   the commands that read it (D3D-76).
 - Upload-heap buffers prefer `DEVICE_LOCAL | HOST_VISIBLE | HOST_COHERENT` memory when the GPU has Resizable BAR
-  (D3D-96): the CPU writes them through the BAR and the GPU reads them from VRAM. `leonida::resizable_bar`
+  (D3D-96): the CPU writes them through the BAR and the GPU reads them from VRAM. `recity::resizable_bar`
   (`runtime/src/vulkan_memory.h`) calls it Resizable BAR when such a type sits in a device-local heap larger than
   256 MiB. Without Resizable BAR that type lives in a window of 256 MiB or less (214 MiB on an RTX 3090) that every
   upload buffer would share, so they stay in system memory. If VRAM is full, the allocation falls back to system
-  memory. The device logs which one it uses (`[rt] d3d12: upload heaps in ...`), and `LEONIDA_UPLOAD_SYSMEM=1`
+  memory. The device logs which one it uses (`[rt] d3d12: upload heaps in ...`), and `RECITY_UPLOAD_SYSMEM=1`
   keeps them in system memory to compare the two. Readback buffers keep preferring `HOST_CACHED`.
 
 **Capacity.** The arena is sized by buffers, descriptor heaps and shader code, not by textures. The allocator
@@ -920,7 +920,7 @@ The trace will enumerate them.
     feedback, wave MMA, work graphs, GPU upload heaps) stay `FALSE`/`NOT_SUPPORTED`/`TIER_0`. Checked live against
     the host D3D12 runtime on the same adapter (`NVIDIA GeForce RTX 5080`, driver `616.56`, Windows 11): 15/15 feature
     queries compared with `0` mismatches (`MSAA64KBAlignedTextureSupported = TRUE`,
-    `SupportedSampleCountsWithNoOutputs = 0x1f`, `LEONIDA_VK_VALIDATION=1` with `0` validation errors).
+    `SupportedSampleCountsWithNoOutputs = 0x1f`, `RECITY_VK_VALIDATION=1` with `0` validation errors).
 - `D3D12_FEATURE_FORMAT_SUPPORT`: map to `vkGetPhysicalDeviceFormatProperties`; multisample render-target
   and resolve bits also require the format's image-usage/sample-count query to succeed.
 - `D3D12_FEATURE_FORMAT_INFO`: report the DXGI plane count independently of Vulkan texture support. Both
@@ -1027,7 +1027,7 @@ The trace will enumerate them.
 
     All 17 AMD results fit "a mip is packed once every axis is at most half the tile's largest side"
     (**Hypothesis**: one driver, one GPU). Which split the console's runtime uses, and so which one the layer should
-    follow, is **Open** ([#374](https://github.com/ItsNotRexed/Leonida/issues/374#issuecomment-7071680820)).
+    follow, is **Open**.
   - `UpdateTileMappings` / `CopyTileMappings` log once and do nothing. What that loses: two resources mapped to the
     same heap tiles do not alias, and a tile unmapped or remapped keeps its contents. If the trace shows the game
     relies on either, the next step is sparse binding (`sparseBinding`, `sparseResidencyImage2D`) with the heaps
@@ -1482,7 +1482,7 @@ struct entry {               // 10 uints = 40 bytes
   per-thread and merge at submit. The shader only reads the table, and D3D12 already forbids modifying a descriptor
   that an in-flight command list is using, so the same rule applies.
 
-**Measured (D3D-56, `runtime/test/vk_descriptor_bench.cpp`).** Measured on an NVIDIA GeForce RTX 5080 (discrete, `0x10de:0x2c02`, subgroup 32, driver `NVIDIA 616.56`) using 64-bit Vulkan GPU timestamps (`1.000 ns` period) against `leonida::DescriptorTable` (90% T# / 10% S#) with the exact `tools/rdna2spirv.py` `desc_probe` loop. Unless noted, dispatches run `4096 x 64` invocations x `64` iterations (`16.78M` single / `33.55M` T#+S# pair lookups, median of 25 reps); wave-uniform sweeps use `group_stride = iters` (`64`), `lane_stride = 0` so all distinct entries are visited (at 100k: `90,000` T#, `10,000` S#, `100,000` T#+S# pairs, `131,072` miss keys; `uniform_hot_tsharp` repeats `1` key and measures `4.6–4.8 us/1M` in `device_local`):
+**Measured (D3D-56, `runtime/test/vk_descriptor_bench.cpp`).** Measured on an NVIDIA GeForce RTX 5080 (discrete, `0x10de:0x2c02`, subgroup 32, driver `NVIDIA 616.56`) using 64-bit Vulkan GPU timestamps (`1.000 ns` period) against `recity::DescriptorTable` (90% T# / 10% S#) with the exact `tools/rdna2spirv.py` `desc_probe` loop. Unless noted, dispatches run `4096 x 64` invocations x `64` iterations (`16.78M` single / `33.55M` T#+S# pair lookups, median of 25 reps); wave-uniform sweeps use `group_stride = iters` (`64`), `lane_stride = 0` so all distinct entries are visited (at 100k: `90,000` T#, `10,000` S#, `100,000` T#+S# pairs, `131,072` miss keys; `uniform_hot_tsharp` repeats `1` key and measures `4.6–4.8 us/1M` in `device_local`):
 
 | Entries (cap / load / bytes / mean probes) | Placement | `uniform_tsharp_hit` (us/1M, Glk/s) | `uniform_pair_ts` (us/1M, Glk/s) | `divergent_tsharp_hit` (us/1M, Glk/s) | `divergent_pair_ts` (us/1M, Glk/s) | `divergent_miss` (us/1M, Glk/s) |
 |---|---|---|---|---|---|---|
@@ -1681,7 +1681,7 @@ lowered shaders but has no reference output yet, so correctness is unverified.
 
 `americas-recomp` / AnyPS5 is **GPL-2.0-only**. GPL-2.0-only is not compatible with this repository's
 GPL-3.0-or-later, so no code, headers, generated stubs or other implementation text from that tree may be copied
-into Leonida. This section records ABI/format facts and links only; the designs in this document are independent.
+into ReCity. This section records ABI/format facts and links only; the designs in this document are independent.
 Xodus is LGPL-2.1 and is cited only for its coverage number, not as a code source.
 
 ## 8. Known vs unknown

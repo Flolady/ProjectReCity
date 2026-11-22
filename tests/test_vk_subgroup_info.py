@@ -273,7 +273,7 @@ class LoadVulkanTest(unittest.TestCase):
 
     def test_macos_loads_moltenvk(self):
         with mock.patch.object(vk_info.os, "name", "posix"), mock.patch.object(vk_info.sys, "platform", "darwin"), \
-                mock.patch.dict(vk_info.os.environ, {"LEONIDA_VULKAN_LOADER": ""}):
+                mock.patch.dict(vk_info.os.environ, {"RECITY_VULKAN_LOADER": ""}):
             with mock.patch.object(vk_info.ctypes, "CDLL") as cdll:
                 self.assertIs(vk_info.load_vulkan(), cdll.return_value)
                 cdll.assert_called_once_with("libMoltenVK.dylib")
@@ -286,7 +286,7 @@ class LoadVulkanTest(unittest.TestCase):
     def test_macos_uses_only_the_explicit_loader(self):
         path = "/custom/libMoltenVK.dylib"
         with mock.patch.object(vk_info.os, "name", "posix"), mock.patch.object(vk_info.sys, "platform", "darwin"), \
-                mock.patch.dict(vk_info.os.environ, {"LEONIDA_VULKAN_LOADER": path}):
+                mock.patch.dict(vk_info.os.environ, {"RECITY_VULKAN_LOADER": path}):
             with mock.patch.object(vk_info.ctypes, "CDLL") as cdll:
                 self.assertIs(vk_info.load_vulkan(), cdll.return_value)
                 cdll.assert_called_once_with(path)

@@ -1,6 +1,6 @@
 // Shared setup for the GPU tests of the D3D12 layer: a Vulkan 1.3 device with dynamicRendering, synchronization2,
 // timelineSemaphore and separateDepthStencilLayouts, images, buffers and one-shot submissions.
-// Set LEONIDA_VK_VALIDATION=1 to run under VK_LAYER_KHRONOS_validation; Device::validation_errors() counts errors.
+// Set RECITY_VK_VALIDATION=1 to run under VK_LAYER_KHRONOS_validation; Device::validation_errors() counts errors.
 #pragma once
 
 #include "vulkan_loader.h"
@@ -124,7 +124,7 @@ public:
 #pragma warning(push)
 #pragma warning(disable : 4996)  // getenv: read once, at startup
 #endif
-        const char* env = std::getenv("LEONIDA_VK_VALIDATION");
+        const char* env = std::getenv("RECITY_VK_VALIDATION");
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
@@ -154,7 +154,7 @@ public:
             bool found = false;
             for (const auto& properties : layers) found = found || std::strcmp(properties.layerName, layer) == 0;
             if (!found) {
-                std::fprintf(stderr, "LEONIDA_VK_VALIDATION is set but %s is not installed\n", layer);
+                std::fprintf(stderr, "RECITY_VK_VALIDATION is set but %s is not installed\n", layer);
                 return DeviceStatus::failed;
             }
             instance_info.pNext = &validation_features;

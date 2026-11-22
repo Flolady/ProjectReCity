@@ -5,7 +5,7 @@
 // into a readback buffer prefilled with 0xcd, and the bytes are compared. Only the texels a footprint row holds are
 // compared (row padding is the driver's); everything else, including the 0xcd around a partial copy, must match.
 // Layouts come from the host's GetCopyableFootprints for both sides (those are compared separately).
-// LEONIDA_HOST_ADAPTER picks the host side: "warp", or part of an adapter name; unset is the default adapter.
+// RECITY_HOST_ADAPTER picks the host side: "warp", or part of an adapter name; unset is the default adapter.
 #pragma once
 #include <windows.h>
 #include <d3d12.h>
@@ -38,7 +38,7 @@ struct Ptr {
     T* operator->() const { return p; }
 };
 
-// An explicit adapter LUID takes precedence over LEONIDA_HOST_ADAPTER for same-adapter comparisons.
+// An explicit adapter LUID takes precedence over RECITY_HOST_ADAPTER for same-adapter comparisons.
 inline bool try_create_host(Ptr<ID3D12Device>& host, std::string& name, const LUID* luid = nullptr) {
     const HMODULE d3d12 = LoadLibraryExA("d3d12.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     const HMODULE dxgi = LoadLibraryExA("dxgi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
@@ -52,7 +52,7 @@ inline bool try_create_host(Ptr<ID3D12Device>& host, std::string& name, const LU
     Ptr<IDXGIFactory4> factory;
     if (FAILED(create_factory(IID_PPV_ARGS(&factory.p)))) return false;
     char want[128] = {};
-    GetEnvironmentVariableA("LEONIDA_HOST_ADAPTER", want, sizeof(want));
+    GetEnvironmentVariableA("RECITY_HOST_ADAPTER", want, sizeof(want));
     Ptr<IDXGIAdapter1> adapter;
     if (luid) {
         if (FAILED(factory->EnumAdapterByLuid(*luid, IID_PPV_ARGS(&adapter.p)))) return false;
@@ -97,13 +97,13 @@ inline bool try_create_host(Ptr<ID3D12Device>& host, std::string& name, const LU
     return true;
 }
 
-// A host device, or false when there is none (the comparisons are then skipped). When LEONIDA_HOST_ADAPTER names an
+// A host device, or false when there is none (the comparisons are then skipped). When RECITY_HOST_ADAPTER names an
 // adapter that cannot be had, the run fails: a typo must not turn the comparisons into a silent pass.
 inline bool create_host(Ptr<ID3D12Device>& host, std::string& name) {
     if (try_create_host(host, name)) return true;
     char want[128] = {};
-    if (GetEnvironmentVariableA("LEONIDA_HOST_ADAPTER", want, sizeof(want)) && want[0]) {
-        std::fprintf(stderr, "LEONIDA_HOST_ADAPTER=%s: no such adapter, or no D3D12 device on it\n", want);
+    if (GetEnvironmentVariableA("RECITY_HOST_ADAPTER", want, sizeof(want)) && want[0]) {
+        std::fprintf(stderr, "RECITY_HOST_ADAPTER=%s: no such adapter, or no D3D12 device on it\n", want);
         std::exit(1);
     }
     return false;
@@ -204,7 +204,7 @@ struct Run {
         queue->ExecuteCommandLists(1, lists);
         if (ours) {
             const auto result = rt::d3d12::last_execute_result(queue.p);
-            if (result != leonida::ReplayResult::success) {
+            if (result != recity::ReplayResult::success) {
                 refused = true;
                 return "the layer refused the list (ReplayResult " + std::to_string(int(result)) + ")";
             }

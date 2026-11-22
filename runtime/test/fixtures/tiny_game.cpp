@@ -4,7 +4,7 @@
 // It checks its arguments, a static initializer, the heap, a file round trip, a second thread, and the
 // xgameruntime.dll imports (answered by the shim registry: the stub DLL it links against would fail them), then
 // calls exit() with 0 when everything held. Two checks are opt-in: thread_local needs static TLS (#93;
-// LEONIDA_RUN_TLS=1), and a C++ exception (LEONIDA_RUN_EH=1) needs more than the unwind tables #176 registers on MSVC:
+// RECITY_RUN_TLS=1), and a C++ exception (RECITY_RUN_EH=1) needs more than the unwind tables #176 registers on MSVC:
 // _CxxThrowException finds the throwing image with RtlPcToFileHeader, which only knows modules the Windows loader
 // mapped. With MinGW (libgcc's SEH unwinder) the #176 tables are enough and the check passes.
 #include <windows.h>
@@ -58,16 +58,16 @@ int main(int argc, char** argv) {
 
     char tmp[MAX_PATH] = {};
     GetTempPathA(MAX_PATH, tmp);
-    std::string path = std::string(tmp) + "leonida_tiny_game_" + std::to_string(GetCurrentProcessId()) + ".txt";
+    std::string path = std::string(tmp) + "recity_tiny_game_" + std::to_string(GetCurrentProcessId()) + ".txt";
     bool file_ok = false;
     if (FILE* f = std::fopen(path.c_str(), "wb")) {
-        std::fputs("leonida", f);
+        std::fputs("recity", f);
         std::fclose(f);
         char back[16] = {};
         if (FILE* r = std::fopen(path.c_str(), "rb")) {
             std::fread(back, 1, 7, r);
             std::fclose(r);
-            file_ok = std::strcmp(back, "leonida") == 0;
+            file_ok = std::strcmp(back, "recity") == 0;
         }
         std::remove(path.c_str());
     }
@@ -82,15 +82,15 @@ int main(int argc, char** argv) {
     check(XSystemGetDeviceType() == 7, "XSystemGetDeviceType is answered by the gta6rt shim (Series X)");
     XGameRuntimeUninitialize();
 
-    if (env_on("LEONIDA_RUN_TLS")) {
+    if (env_on("RECITY_RUN_TLS")) {
         int seen = -1;
         std::thread t([&] { seen = t_counter; t_counter = 9; });
         t.join();
         check(t_counter == 5 && seen == 5, "thread_local starts at its initializer on each thread");
     } else {
-        std::printf("tiny_game: SKIP thread_local (needs static TLS, #93; LEONIDA_RUN_TLS=1)\n");
+        std::printf("tiny_game: SKIP thread_local (needs static TLS, #93; RECITY_RUN_TLS=1)\n");
     }
-    if (env_on("LEONIDA_RUN_EH")) {
+    if (env_on("RECITY_RUN_EH")) {
         bool caught = false;
         try {
             throw std::string("boom");
@@ -99,7 +99,7 @@ int main(int argc, char** argv) {
         }
         check(caught, "a C++ exception is thrown and caught inside the image");
     } else {
-        std::printf("tiny_game: SKIP C++ exception (MSVC needs the image known to RtlPcToFileHeader; LEONIDA_RUN_EH=1)\n");
+        std::printf("tiny_game: SKIP C++ exception (MSVC needs the image known to RtlPcToFileHeader; RECITY_RUN_EH=1)\n");
     }
 
     std::printf("tiny_game: %s\n", g_failures ? "FAILED" : "OK");

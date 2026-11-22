@@ -81,7 +81,7 @@ def write_ogg_opus(path: str, packets: list, channels: int, serial: int, length:
     """length: the stream's declared sample count at 48 kHz; the last page's granule position is trimmed to it
     (Ogg Opus end trimming), so decoders stop at the exact end instead of the padded last frame."""
     head = b"OpusHead" + struct.pack("<BBHIhB", 1, channels, 0, 48000, 0, 0)
-    tags = b"OpusTags" + struct.pack("<I", 8) + b"leonida " + struct.pack("<I", 0)
+    tags = b"OpusTags" + struct.pack("<I", 8) + b"recity  " + struct.pack("<I", 0)
     out = [ogg_page(serial, 0, 0, [head], 0x02), ogg_page(serial, 1, 0, [tags], 0x00)]
     seq, granule, pending, size = 2, 0, [], 0
     for i, p in enumerate(packets):

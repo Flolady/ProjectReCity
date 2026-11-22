@@ -515,10 +515,10 @@ class GameDiscoveryTest(unittest.TestCase):
 
 class PathAndGameSelectionTest(PreflightTestBase):
     def test_choose_game_single_found(self):
-        dummy_entry = ("D:\\TestGames\\Leonida", {"title": "Xbox Package", "version": "1.0.2.1"})
+        dummy_entry = ("D:\\TestGames\\ReCity", {"title": "Xbox Package", "version": "1.0.2.1"})
         with mock.patch("make_game.find_dumps", return_value=[dummy_entry]):
             chosen = make_game.choose_game()
-            self.assertEqual(chosen, "D:\\TestGames\\Leonida")
+            self.assertEqual(chosen, "D:\\TestGames\\ReCity")
 
     def test_choose_game_none_found_non_interactive(self):
         with mock.patch("make_game.find_dumps", return_value=[]), \
@@ -537,7 +537,7 @@ class PathAndGameSelectionTest(PreflightTestBase):
                               match="More than one copy found: choose one with --game.")
 
     def test_default_out_matches_documents_folder(self):
-        expected = os.path.join(os.path.expanduser("~"), "Documents", "Leonida")
+        expected = os.path.join(os.path.expanduser("~"), "Documents", "ReCity")
         self.assertEqual(make_game.default_out(), expected)
 
     def test_constants_definitions(self):

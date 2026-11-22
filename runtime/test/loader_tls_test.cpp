@@ -51,7 +51,7 @@ void write_file(const fs::path& path, const void* data, size_t size) {
 struct TempDir {
     fs::path path;
     TempDir() {
-        path = fs::temp_directory_path() / ("leonida_loader_tls_test_" + std::to_string(GetCurrentProcessId()));
+        path = fs::temp_directory_path() / ("recity_loader_tls_test_" + std::to_string(GetCurrentProcessId()));
         std::error_code ec;
         fs::remove_all(path, ec);
         fs::create_directories(path);

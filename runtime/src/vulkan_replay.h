@@ -40,7 +40,7 @@
 #include <utility>
 #include <vector>
 
-namespace leonida {
+namespace recity {
 
 // What the resolver knows about a resource. image == VK_NULL_HANDLE means a buffer in the shared GPU address
 // space: its transitions become global memory barriers.
@@ -1805,4 +1805,4 @@ ReplayResult replay(const CommandList& list, VkCommandBuffer command_buffer, Res
     return ReplayResult::success;
 }
 
-} // namespace leonida
+} // namespace recity

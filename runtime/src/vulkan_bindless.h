@@ -46,7 +46,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace leonida {
+namespace recity {
 
 // The translator's image dimensions; the values are its STORE_DIMS indices. A cube is a 2D array of six layers.
 enum class ImageDimension : std::uint32_t { dim_2d = 0, dim_2d_array = 1, dim_3d = 2, dim_1d = 3 };
@@ -288,25 +288,25 @@ public:
 
 private:
     struct Functions {
-#define LEONIDA_BINDLESS_FUNCTIONS(X)                                                                          \
+#define RECITY_BINDLESS_FUNCTIONS(X)                                                                          \
     X(vkCreateDescriptorSetLayout) X(vkDestroyDescriptorSetLayout) X(vkCreateDescriptorPool)                   \
     X(vkDestroyDescriptorPool) X(vkAllocateDescriptorSets) X(vkUpdateDescriptorSets) X(vkCreateBuffer)         \
     X(vkDestroyBuffer) X(vkGetBufferMemoryRequirements) X(vkBindBufferMemory) X(vkAllocateMemory)              \
     X(vkFreeMemory) X(vkMapMemory) X(vkCreateImage) X(vkDestroyImage) X(vkGetImageMemoryRequirements)          \
     X(vkBindImageMemory) X(vkCreateImageView) X(vkDestroyImageView) X(vkCreateSampler) X(vkDestroySampler)     \
     X(vkCmdPipelineBarrier) X(vkCmdCopyBuffer) X(vkCmdUpdateBuffer) X(vkCmdClearColorImage)
-#define LEONIDA_BINDLESS_MEMBER(name) PFN_##name name = nullptr;
-        LEONIDA_BINDLESS_FUNCTIONS(LEONIDA_BINDLESS_MEMBER)
-#undef LEONIDA_BINDLESS_MEMBER
+#define RECITY_BINDLESS_MEMBER(name) PFN_##name name = nullptr;
+        RECITY_BINDLESS_FUNCTIONS(RECITY_BINDLESS_MEMBER)
+#undef RECITY_BINDLESS_MEMBER
 
         bool load(PFN_vkGetDeviceProcAddr get, VkDevice device) {
             bool all = true;
-#define LEONIDA_BINDLESS_LOAD(name)                                      \
+#define RECITY_BINDLESS_LOAD(name)                                      \
     name = reinterpret_cast<PFN_##name>(get(device, #name));             \
     all = all && name != nullptr;
-            LEONIDA_BINDLESS_FUNCTIONS(LEONIDA_BINDLESS_LOAD)
-#undef LEONIDA_BINDLESS_LOAD
-#undef LEONIDA_BINDLESS_FUNCTIONS
+            RECITY_BINDLESS_FUNCTIONS(RECITY_BINDLESS_LOAD)
+#undef RECITY_BINDLESS_LOAD
+#undef RECITY_BINDLESS_FUNCTIONS
             return all;
         }
     };
@@ -723,4 +723,4 @@ private:
     std::vector<TableBuffers> retired_;
 };
 
-} // namespace leonida
+} // namespace recity

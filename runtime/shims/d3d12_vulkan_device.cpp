@@ -29,10 +29,10 @@
 namespace rt::d3d12 {
 namespace {
 
-// Every descriptor slot is this many bytes; an RTV or DSV slot holds a leonida::TargetView. The console's own
+// Every descriptor slot is this many bytes; an RTV or DSV slot holds a recity::TargetView. The console's own
 // increments are open question 4 in docs/d3d12_vulkan.md; the application reads them from the device, as it must.
 constexpr UINT kDescriptorSize = 32;
-static_assert(sizeof(leonida::TargetView) <= kDescriptorSize);
+static_assert(sizeof(recity::TargetView) <= kDescriptorSize);
 
 // The shader model and root signature version this layer can honour. Nothing in the runtime compiles DXIL: the
 // game's shaders arrive as SPIR-V from the offline translator, and the only DXIL path (the BVH builder) is lowered
@@ -171,7 +171,7 @@ bool xr_bias_compatible(const D3D12_RESOURCE_DESC& desc) {
 }
 
 // A volume RTV covers W slices of one mip. UINT_MAX extends through the last slice of that mip.
-leonida::TargetView volume_rtv(leonida::ResourceId id, const D3D12_RESOURCE_DESC& resource,
+recity::TargetView volume_rtv(recity::ResourceId id, const D3D12_RESOURCE_DESC& resource,
                                const D3D12_RENDER_TARGET_VIEW_DESC* view) {
     if (!(resource.Flags & D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET) || vulkan_format(resource.Format, false).typeless)
         return {};
@@ -218,10 +218,10 @@ VkImageCreateInfo texture_create_info(const D3D12_RESOURCE_DESC& desc, const For
 // What a device's children need from it, kept apart from the COM class so children can hold a plain pointer.
 struct DeviceState {
     VulkanDeviceInfo info;
-    std::unique_ptr<leonida::VulkanContext> context;
+    std::unique_ptr<recity::VulkanContext> context;
     VkPhysicalDeviceMemoryProperties memory{};
     // D3D-96: upload-heap buffers prefer DEVICE_LOCAL | HOST_VISIBLE memory, so the GPU reads them from VRAM. Only
-    // with Resizable BAR (leonida::resizable_bar); LEONIDA_UPLOAD_SYSMEM=1 keeps them in system memory to compare.
+    // with Resizable BAR (recity::resizable_bar); RECITY_UPLOAD_SYSMEM=1 keeps them in system memory to compare.
     bool upload_in_vram = false;
 
     // What D3D12_OPTIONS1 answers with: the physical device's own subgroup facts, read on first use.
@@ -248,7 +248,7 @@ struct DeviceState {
     // WriteToSubresource/ReadFromSubresource without host image copy: one staging copy at a time, submitted to
     // the device's VkQueue and waited for. Created on first use.
     std::mutex staging_mutex;
-    std::unique_ptr<leonida::VulkanQueue> staging_queue;
+    std::unique_ptr<recity::VulkanQueue> staging_queue;
 
     bool depth_usable(VkFormat format) const {
         VkFormatProperties properties{};
@@ -344,18 +344,18 @@ struct DeviceState {
     // those bytes: a copied descriptor needs nothing more. An image's entries live until its texture is
     // destroyed, samplers until the device is.
     struct ImageEntry {
-        leonida::ImageDimension dimension;
+        recity::ImageDimension dimension;
         std::uint32_t index;
         VkImageView sampled;
         VkImageView storage;  // the same range without a component mapping, for the storage bindings; or null
         std::uint64_t address;
     };
-    std::unique_ptr<leonida::BindlessSet> bindless;
+    std::unique_ptr<recity::BindlessSet> bindless;
     std::mutex descriptor_mutex;  // the set and the containers below
-    std::map<leonida::DescriptorKey, ImageEntry> image_entries;
-    std::multimap<std::uint64_t, leonida::DescriptorKey> image_keys;  // by the texture's address
+    std::map<recity::DescriptorKey, ImageEntry> image_entries;
+    std::multimap<std::uint64_t, recity::DescriptorKey> image_keys;  // by the texture's address
     std::vector<ImageEntry> replaced_images;  // kept until their texture goes: work in flight may still use them
-    std::map<leonida::DescriptorKey, VkSampler> sampler_entries;
+    std::map<recity::DescriptorKey, VkSampler> sampler_entries;
     // A T# names a texture by an address of its own: above 4 GiB, which the GPU address arena for buffers (docs
     // section 3.3) stays below, and 256 bytes apart (the T# keeps addresses in 256-byte units). Nothing
     // dereferences it.
@@ -396,21 +396,21 @@ struct DeviceState {
     // Gives the T# `words` a view in set 0 and an entry in the hash table, unless it has them. `storage`: shaders
     // write through it too (an unordered-access view), so it also goes into the storage arrays, which are
     // shorter. False when set 0 cannot show the image; the descriptor then finds the fallback at index 0.
-    bool bind_image(const leonida::gfx10::ImageWords& words, const leonida::gfx10::Image& image, VkImage vk_image,
+    bool bind_image(const recity::gfx10::ImageWords& words, const recity::gfx10::Image& image, VkImage vk_image,
                     VkFormat image_format, VkImageAspectFlags aspects, bool storage) {
-        namespace g = leonida::gfx10;
+        namespace g = recity::gfx10;
         std::lock_guard lock(descriptor_mutex);
         if (!bindless) return false;
         const auto existing = image_entries.find(words);
         if (existing != image_entries.end() && (existing->second.storage || !storage)) return true;
 
-        leonida::ImageDimension dimension;
+        recity::ImageDimension dimension;
         switch (image.type) {
-        case g::ImageType::image_2d: dimension = leonida::ImageDimension::dim_2d; break;
+        case g::ImageType::image_2d: dimension = recity::ImageDimension::dim_2d; break;
         case g::ImageType::image_2d_array:
-        case g::ImageType::cube: dimension = leonida::ImageDimension::dim_2d_array; break;
-        case g::ImageType::image_3d: dimension = leonida::ImageDimension::dim_3d; break;
-        case g::ImageType::image_1d: dimension = leonida::ImageDimension::dim_1d; break;
+        case g::ImageType::cube: dimension = recity::ImageDimension::dim_2d_array; break;
+        case g::ImageType::image_3d: dimension = recity::ImageDimension::dim_3d; break;
+        case g::ImageType::image_1d: dimension = recity::ImageDimension::dim_1d; break;
         default:
             log_once("set 0 has no array for this image type (1D array or multisampled):", int(image.type));
             return false;
@@ -455,7 +455,7 @@ struct DeviceState {
             image.first_mip, image.mip_count, image.first_layer, image.layer_count};
         ImageEntry entry{dimension, 0, VK_NULL_HANDLE, VK_NULL_HANDLE, image.address};
         if (vk.vkCreateImageView(info.device, &view_info, nullptr, &entry.sampled) != VK_SUCCESS) return false;
-        leonida::StorageViews views{};
+        recity::StorageViews views{};
         if (storage) {
             view_info.components = {};
             if (vk.vkCreateImageView(info.device, &view_info, nullptr, &entry.storage) != VK_SUCCESS) {
@@ -505,11 +505,11 @@ struct DeviceState {
     }
 
     // Gives the S# `words` a sampler in set 0 and an entry in the hash table, unless it has them.
-    bool bind_sampler(const leonida::gfx10::SamplerWords& words) {
-        namespace g = leonida::gfx10;
+    bool bind_sampler(const recity::gfx10::SamplerWords& words) {
+        namespace g = recity::gfx10;
         std::lock_guard lock(descriptor_mutex);
         if (!bindless) return false;
-        const leonida::DescriptorKey key = leonida::make_ssharp_key(words.data());
+        const recity::DescriptorKey key = recity::make_ssharp_key(words.data());
         if (sampler_entries.count(key)) return true;
         const g::Sampler sampler = g::decode(words);
         VkSamplerCreateInfo sampler_info = g::vulkan_sampler(sampler);
@@ -625,7 +625,7 @@ public:
         if (memory_) vk.vkFreeMemory(dev, memory_, nullptr);
     }
 
-    leonida::ResourceId id() const { return resource_id(this); }
+    recity::ResourceId id() const { return resource_id(this); }
     VkImage image() const { return image_; }
     const D3D12_RESOURCE_DESC& desc() const { return desc_; }
     VkFormat format() const { return format_; }                  // of the image
@@ -665,7 +665,7 @@ public:
         } else {
             log_once("default-heap buffers are not zero-filled yet; dimension", int(desc_.Dimension));
         }
-        leonida::ResourceBinding binding{};  // a buffer: no image
+        recity::ResourceBinding binding{};  // a buffer: no image
         binding.buffer = buffer_;
         binding.size = desc_.Width;
         device_.context->add_resource(id(), binding);
@@ -697,7 +697,7 @@ public:
         if (!memory_ || vk.vkBindImageMemory(device_.info.device, image_, memory_, 0) != VK_SUCCESS)
             return E_OUTOFMEMORY;
 
-        leonida::ResourceBinding binding{};
+        recity::ResourceBinding binding{};
         binding.image = image_;
         binding.rgba8_typeless = desc_.Format == DXGI_FORMAT_R8G8B8A8_TYPELESS;
         binding.format = format.format;
@@ -786,8 +786,8 @@ public:
     HRESULT STDMETHODCALLTYPE Map(UINT subresource, const D3D12_RANGE*, void** data) override {
         if (image_) {
             VkImageSubresourceRange range{};
-            return !data && cpu_visible() && subresource != leonida::all_subresources &&
-                           leonida::image_range(binding_, subresource, range)
+            return !data && cpu_visible() && subresource != recity::all_subresources &&
+                           recity::image_range(binding_, subresource, range)
                        ? S_OK
                        : E_INVALIDARG;
         }
@@ -813,7 +813,7 @@ private:
     struct Region {
         VkImageSubresourceLayers layers;
         D3D12_BOX box;
-        leonida::BlockFormat block;
+        recity::BlockFormat block;
         std::uint32_t rows;
         std::uint64_t row_bytes;
         std::uint32_t slices;
@@ -823,7 +823,7 @@ private:
     // mip, or one that cuts a compressed block anywhere but at the mip edge.
     bool region(UINT subresource, const D3D12_BOX* box, Region& out) const {
         VkImageSubresourceRange range{};
-        if (subresource == leonida::all_subresources || !leonida::image_range(binding_, subresource, range)) return false;
+        if (subresource == recity::all_subresources || !recity::image_range(binding_, subresource, range)) return false;
         if (binding_.samples > 1) return false;  // D3D12 has no CPU copies of multisampled textures; Vulkan neither
         const std::uint32_t mip = range.baseMipLevel;
         const std::uint32_t width = std::max(1u, binding_.width >> mip), height = std::max(1u, binding_.height >> mip);
@@ -833,7 +833,7 @@ private:
         if (b.left >= b.right || b.top >= b.bottom || b.front >= b.back || b.right > width || b.bottom > height ||
             b.back > depth)
             return false;
-        out.block = leonida::block_format(binding_.format, range.aspectMask);
+        out.block = recity::block_format(binding_.format, range.aspectMask);
         if (!out.block.bytes) return false;
         const std::uint32_t k = out.block.block;
         if (b.left % k || b.top % k || (b.right % k && b.right != width) || (b.bottom % k && b.bottom != height))
@@ -927,7 +927,7 @@ private:
                                        binding_.volume ? VK_REMAINING_ARRAY_LAYERS : binding_.array_layers};
         if (device_.transition_image_layout(dev, 1, &transition) != VK_SUCCESS) return false;
         if (binding_.not_zeroed) return true;
-        const std::uint32_t planes = leonida::two_planes(binding_) ? 2 : 1;
+        const std::uint32_t planes = recity::two_planes(binding_) ? 2 : 1;
         const std::uint32_t per_plane = binding_.mip_levels * binding_.array_layers;
         std::vector<std::byte> zero;
         for (UINT subresource = 0; subresource < planes * per_plane; ++subresource) {
@@ -948,7 +948,7 @@ private:
         const VkDevice dev = device_.info.device;
         const std::uint64_t pitch = (r.row_bytes + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1) /
                                     D3D12_TEXTURE_DATA_PITCH_ALIGNMENT * D3D12_TEXTURE_DATA_PITCH_ALIGNMENT;
-        leonida::ResourceBinding staging{};
+        recity::ResourceBinding staging{};
         staging.size = pitch * r.rows * r.slices;
         VkBufferCreateInfo info{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
         info.size = staging.size;
@@ -972,37 +972,37 @@ private:
 
         // The staging buffer is a resource only for the length of this call; its ID is its binding's address,
         // which no COM resource can share.
-        const auto staging_id = reinterpret_cast<leonida::ResourceId>(&staging);
+        const auto staging_id = reinterpret_cast<recity::ResourceId>(&staging);
         const std::uint32_t k = r.block.block;
-        const leonida::CopyLocation texture{id(), false, subresource, 0, 0, 0, 0, 0};
-        const leonida::CopyLocation placed{staging_id, true, 0, 0, std::uint32_t(r.row_bytes / r.block.bytes) * k,
+        const recity::CopyLocation texture{id(), false, subresource, 0, 0, 0, 0, 0};
+        const recity::CopyLocation placed{staging_id, true, 0, 0, std::uint32_t(r.row_bytes / r.block.bytes) * k,
                                            r.rows * k, r.slices, std::uint32_t(pitch)};
-        leonida::CopyTexture copy{};
+        recity::CopyTexture copy{};
         if (write) {
             copy = {texture, r.box.left, r.box.top, r.box.front, placed, false, {}};
         } else {
             copy = {placed, 0, 0, 0, texture, true,
                     {r.box.left, r.box.top, r.box.front, r.box.right, r.box.bottom, r.box.back}};
         }
-        leonida::CommandList list;
+        recity::CommandList list;
         if (!list.copy_texture(copy) || !list.close()) return release(E_INVALIDARG);
         device_.context->add_resource(staging_id, staging);
-        leonida::ReplayResult result = leonida::ReplayResult::unsupported;
+        recity::ReplayResult result = recity::ReplayResult::unsupported;
         {
             std::lock_guard lock(device_.staging_mutex);
             if (!device_.staging_queue) {
-                device_.staging_queue = std::make_unique<leonida::VulkanQueue>(*device_.context, device_.info.queue,
+                device_.staging_queue = std::make_unique<recity::VulkanQueue>(*device_.context, device_.info.queue,
                                                                                device_.info.queue_family);
             }
             if (device_.staging_queue->ok()) {
-                const leonida::CommandList* lists[] = {&list};
+                const recity::CommandList* lists[] = {&list};
                 result = device_.staging_queue->execute(lists);
-                if (result == leonida::ReplayResult::success && !device_.staging_queue->idle())
-                    result = leonida::ReplayResult::unsupported;
+                if (result == recity::ReplayResult::success && !device_.staging_queue->idle())
+                    result = recity::ReplayResult::unsupported;
             }
         }
         device_.context->remove_resource(staging_id);
-        if (result != leonida::ReplayResult::success) {
+        if (result != recity::ReplayResult::success) {
             log_once("WriteToSubresource/ReadFromSubresource staging copy failed; replay result", int(result));
             return release(E_FAIL);
         }
@@ -1029,14 +1029,14 @@ private:
     VkImageAspectFlags aspects_ = 0;
     std::uint64_t image_address_ = 0;
     bool reserved_ = false;
-    leonida::ResourceBinding binding_{};  // a texture's, as registered with the context
+    recity::ResourceBinding binding_{};  // a texture's, as registered with the context
     bool host_transfer_ = false;          // created with VK_IMAGE_USAGE_HOST_TRANSFER_BIT_EXT
 };
 
 // A view of a texture as Create*View describes it, before the resource's own shape is applied.
 struct TextureView {
     DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;  // UNKNOWN: the resource's
-    leonida::gfx10::ImageType type = leonida::gfx10::ImageType::image_2d;
+    recity::gfx10::ImageType type = recity::gfx10::ImageType::image_2d;
     UINT first_mip = 0;
     UINT mip_count = ~0u;  // ~0: to the last
     UINT first_layer = 0;
@@ -1048,8 +1048,8 @@ struct TextureView {
 
 // The T# of a view: what the shader gets to know about it, in the structure the console's shaders read.
 // False (with a log) for a view set 0 cannot show yet.
-bool image_descriptor(const Resource& resource, const TextureView& view, leonida::gfx10::Image& out) {
-    namespace g = leonida::gfx10;
+bool image_descriptor(const Resource& resource, const TextureView& view, recity::gfx10::Image& out) {
+    namespace g = recity::gfx10;
     const D3D12_RESOURCE_DESC& desc = resource.desc();
     // Plane 1 of a depth-stencil texture is its stencil, viewed as X24_TYPELESS_G8_UINT (D24S8) or
     // X32_TYPELESS_G8X24_UINT (D32S8): eight unsigned bits in G, as D3D12 returns them. The T# is 8_UINT, the
@@ -1150,8 +1150,8 @@ bool image_descriptor(const Resource& resource, const TextureView& view, leonida
 }
 
 // The S# of a D3D12 sampler.
-leonida::gfx10::Sampler sampler_descriptor(const D3D12_SAMPLER_DESC& desc) {
-    namespace g = leonida::gfx10;
+recity::gfx10::Sampler sampler_descriptor(const D3D12_SAMPLER_DESC& desc) {
+    namespace g = recity::gfx10;
     const auto address = [](D3D12_TEXTURE_ADDRESS_MODE mode) {
         switch (mode) {
         case D3D12_TEXTURE_ADDRESS_MODE_MIRROR: return g::AddressMode::mirror;
@@ -1219,10 +1219,10 @@ public:
         device_.context->vk.vkDestroyQueryPool(device_.info.device, pool_, nullptr);
     }
 
-    leonida::QueryHeapId id() const { return query_heap_id(this); }
+    recity::QueryHeapId id() const { return query_heap_id(this); }
 
     HRESULT create(const D3D12_QUERY_HEAP_DESC& desc) {
-        namespace h = leonida::d3d12_query_heap;
+        namespace h = recity::d3d12_query_heap;
         auto& vk = device_.context->vk;
         if (!vk.vkCreateQueryPool || !vk.vkDestroyQueryPool) return E_NOTIMPL;
         VkQueryPoolCreateInfo info{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
@@ -1254,7 +1254,7 @@ public:
             pool_ = VK_NULL_HANDLE;
             return E_OUTOFMEMORY;
         }
-        leonida::QueryPool pool{};
+        recity::QueryPool pool{};
         pool.pool = pool_;
         pool.heap_type = desc.Type;
         pool.count = desc.Count;
@@ -1312,11 +1312,11 @@ public:
         {
             char text[4] = {};
             size_t length = 0;
-            const bool sysmem = getenv_s(&length, text, "LEONIDA_UPLOAD_SYSMEM") == 0 && length > 1 && text[0] != '0';
-            state_.upload_in_vram = leonida::resizable_bar(state_.memory) && !sysmem;
+            const bool sysmem = getenv_s(&length, text, "RECITY_UPLOAD_SYSMEM") == 0 && length > 1 && text[0] != '0';
+            state_.upload_in_vram = recity::resizable_bar(state_.memory) && !sysmem;
             std::fprintf(stderr, "[rt] d3d12: upload heaps in %s\n",
                          state_.upload_in_vram ? "VRAM (DEVICE_LOCAL | HOST_VISIBLE, Resizable BAR)"
-                         : sysmem             ? "system memory (LEONIDA_UPLOAD_SYSMEM)"
+                         : sysmem             ? "system memory (RECITY_UPLOAD_SYSMEM)"
                                               : "system memory (no Resizable BAR)");
         }
         for (const char* name : {"vkGetDeviceImageMemoryRequirements", "vkGetDeviceImageMemoryRequirementsKHR"})
@@ -1342,7 +1342,7 @@ public:
             }
         }
 
-        state_.context = std::make_unique<leonida::VulkanContext>(get_device, info.device,
+        state_.context = std::make_unique<recity::VulkanContext>(get_device, info.device,
                                                                   info.separate_depth_stencil_layouts,
                                                                   info.conditional_rendering);
         if (info.host_image_copy) load_host_image_copy(get_device);
@@ -1362,10 +1362,10 @@ public:
     // Set 0 of every translated shader that declares bindings: images, samplers and the descriptor hash table
     // (docs section 3.4). Each ExecuteCommandLists brings it up to date before its commands are written.
     bool create_bindless(PFN_vkGetDeviceProcAddr get_device) {
-        leonida::BindlessFeatures features{};
+        recity::BindlessFeatures features{};
         features.update_after_bind = true;  // VulkanDeviceInfo::bindless promises it
         features.partially_bound = state_.info.bindless_partially_bound;
-        state_.bindless = std::make_unique<leonida::BindlessSet>(get_device, state_.info.device, state_.memory, features);
+        state_.bindless = std::make_unique<recity::BindlessSet>(get_device, state_.info.device, state_.memory, features);
         if (!state_.bindless->ok() || !state_.context->vk.vkCreateSampler) {
             state_.bindless.reset();
             return false;
@@ -1413,7 +1413,7 @@ public:
     bool ok() const { return state_.context && state_.context->loaded(); }
     const VulkanDeviceInfo& info() const { return state_.info; }
     bool upload_in_vram() const { return state_.upload_in_vram; }
-    const leonida::BindlessSet* bindless() const { return state_.bindless.get(); }
+    const recity::BindlessSet* bindless() const { return state_.bindless.get(); }
     void own(const OwnedRuntime& owned) { owned_ = owned; }
     void set_outer(IUnknown* outer) { outer_ = outer; }
 
@@ -1551,7 +1551,7 @@ public:
                                                   D3D12_CPU_DESCRIPTOR_HANDLE destination) override {
         d3d12_trace::record("ID3D12Device::CreateRenderTargetView");
         if (!destination.ptr) return;
-        leonida::TargetView view{};
+        recity::TargetView view{};
         if (const Resource* r = Resource::from<Resource>(resource)) {
             const D3D12_RESOURCE_DESC rd = const_cast<Resource*>(r)->GetDesc();
             view = {r->id(), 0, 0, rd.DepthOrArraySize};
@@ -1592,9 +1592,9 @@ public:
                         view = {};
                     } else {
                         switch (requested) {
-                        case DXGI_FORMAT_R8G8B8A8_UNORM: view.format = leonida::ColorViewFormat::rgba8_unorm; break;
-                        case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB: view.format = leonida::ColorViewFormat::rgba8_srgb; break;
-                        case DXGI_FORMAT_R8G8B8A8_UINT: view.format = leonida::ColorViewFormat::rgba8_uint; break;
+                        case DXGI_FORMAT_R8G8B8A8_UNORM: view.format = recity::ColorViewFormat::rgba8_unorm; break;
+                        case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB: view.format = recity::ColorViewFormat::rgba8_srgb; break;
+                        case DXGI_FORMAT_R8G8B8A8_UINT: view.format = recity::ColorViewFormat::rgba8_uint; break;
                         default: view = {}; break;
                         }
                         if (view.resource) {
@@ -1619,7 +1619,7 @@ public:
                                                   D3D12_CPU_DESCRIPTOR_HANDLE destination) override {
         d3d12_trace::record("ID3D12Device::CreateDepthStencilView");
         if (!destination.ptr) return;
-        leonida::TargetView view{};
+        recity::TargetView view{};
         if (const Resource* r = Resource::from<Resource>(resource)) {
             const D3D12_RESOURCE_DESC rd = const_cast<Resource*>(r)->GetDesc();
             view = {r->id(), 0, 0, rd.DepthOrArraySize};
@@ -1698,15 +1698,15 @@ public:
         TextureView view{};
         if (!desc) {
             if (r->desc().Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D)
-                view.type = leonida::gfx10::ImageType::image_3d;
+                view.type = recity::gfx10::ImageType::image_3d;
             else if (r->desc().DepthOrArraySize > 1)
-                view.type = leonida::gfx10::ImageType::image_2d_array;
+                view.type = recity::gfx10::ImageType::image_2d_array;
         } else {
             view.format = desc->Format;
             view.mapping = desc->Shader4ComponentMapping;
             switch (desc->ViewDimension) {
             case D3D12_SRV_DIMENSION_TEXTURE3D:
-                view.type = leonida::gfx10::ImageType::image_3d;
+                view.type = recity::gfx10::ImageType::image_3d;
                 view.first_mip = desc->Texture3D.MostDetailedMip;
                 view.mip_count = desc->Texture3D.MipLevels;
                 view.min_lod = desc->Texture3D.ResourceMinLODClamp;
@@ -1719,7 +1719,7 @@ public:
                 view.min_lod = desc->Texture2D.ResourceMinLODClamp;
                 break;
             case D3D12_SRV_DIMENSION_TEXTURE2DARRAY:
-                view.type = leonida::gfx10::ImageType::image_2d_array;
+                view.type = recity::gfx10::ImageType::image_2d_array;
                 view.first_mip = desc->Texture2DArray.MostDetailedMip;
                 view.mip_count = desc->Texture2DArray.MipLevels;
                 view.first_layer = desc->Texture2DArray.FirstArraySlice;
@@ -1728,14 +1728,14 @@ public:
                 view.min_lod = desc->Texture2DArray.ResourceMinLODClamp;
                 break;
             case D3D12_SRV_DIMENSION_TEXTURECUBE:
-                view.type = leonida::gfx10::ImageType::cube;
+                view.type = recity::gfx10::ImageType::cube;
                 view.first_mip = desc->TextureCube.MostDetailedMip;
                 view.mip_count = desc->TextureCube.MipLevels;
                 view.layer_count = 6;
                 view.min_lod = desc->TextureCube.ResourceMinLODClamp;
                 break;
             case D3D12_SRV_DIMENSION_TEXTURECUBEARRAY:
-                view.type = leonida::gfx10::ImageType::cube;
+                view.type = recity::gfx10::ImageType::cube;
                 view.first_mip = desc->TextureCubeArray.MostDetailedMip;
                 view.mip_count = desc->TextureCubeArray.MipLevels;
                 view.first_layer = desc->TextureCubeArray.First2DArrayFace;
@@ -1771,7 +1771,7 @@ public:
         TextureView view{};
         view.mip_count = 1;
         if (!desc) {
-            if (r->desc().DepthOrArraySize > 1) view.type = leonida::gfx10::ImageType::image_2d_array;
+            if (r->desc().DepthOrArraySize > 1) view.type = recity::gfx10::ImageType::image_2d_array;
         } else {
             view.format = desc->Format;
             switch (desc->ViewDimension) {
@@ -1781,7 +1781,7 @@ public:
                 view.plane = desc->Texture2D.PlaneSlice;
                 break;
             case D3D12_UAV_DIMENSION_TEXTURE2DARRAY:
-                view.type = leonida::gfx10::ImageType::image_2d_array;
+                view.type = recity::gfx10::ImageType::image_2d_array;
                 view.first_mip = desc->Texture2DArray.MipSlice;
                 view.first_layer = desc->Texture2DArray.FirstArraySlice;
                 view.layer_count = desc->Texture2DArray.ArraySize;
@@ -1802,7 +1802,7 @@ public:
         if (!destination.ptr) return;
         std::memset(reinterpret_cast<void*>(destination.ptr), 0, kDescriptorSize);
         if (!desc) return;
-        const leonida::gfx10::SamplerWords words = leonida::gfx10::encode(sampler_descriptor(*desc));
+        const recity::gfx10::SamplerWords words = recity::gfx10::encode(sampler_descriptor(*desc));
         std::memcpy(reinterpret_cast<void*>(destination.ptr), words.data(), sizeof(words));
         state_.bind_sampler(words);
     }
@@ -1824,11 +1824,11 @@ public:
                                 desc->MipLODBias, desc->MaxAnisotropy, desc->ComparisonFunc, {},
                                 desc->MinLOD,   desc->MaxLOD};
         if (!uint_border) std::memcpy(base.BorderColor, desc->FloatBorderColor, sizeof(base.BorderColor));
-        leonida::gfx10::Sampler sampler = sampler_descriptor(base);
+        recity::gfx10::Sampler sampler = sampler_descriptor(base);
         if (uint_border) {
             // The S#'s border types are the float ones', plus the layer's integer mark (kIntegerBorderPtr), which
             // gives the integer border its own key and VK_BORDER_COLOR_INT_* in Vulkan.
-            namespace g = leonida::gfx10;
+            namespace g = recity::gfx10;
             const UINT* c = desc->UintBorderColor;
             const bool black = c[0] == 0 && c[1] == 0 && c[2] == 0;
             sampler.border_color = black && c[3] == 0                                 ? g::BorderColor::transparent_black
@@ -1838,7 +1838,7 @@ public:
             sampler.integer_border = true;
         }
         sampler.unnormalized = desc->Flags & D3D12_SAMPLER_FLAG_NON_NORMALIZED_COORDINATES;
-        const leonida::gfx10::SamplerWords words = leonida::gfx10::encode(sampler);
+        const recity::gfx10::SamplerWords words = recity::gfx10::encode(sampler);
         std::memset(reinterpret_cast<void*>(destination.ptr), 0, kDescriptorSize);
         std::memcpy(reinterpret_cast<void*>(destination.ptr), words.data(), sizeof(words));
         state_.bind_sampler(words);
@@ -1952,7 +1952,7 @@ public:
     void STDMETHODCALLTYPE GetResourceTiling(ID3D12Resource* resource, UINT* total, D3D12_PACKED_MIP_INFO* packed,
                                              D3D12_TILE_SHAPE* shape, UINT* count, UINT first,
                                              D3D12_SUBRESOURCE_TILING* tilings) override {
-        leonida::ResourceTiling tiling;
+        recity::ResourceTiling tiling;
         Resource* r = Resource::from<Resource>(resource);
         const bool ok = r && r->reserved() && resource_tiling(r->GetDesc(), tiling);
         if (total) *total = ok ? tiling.total_tiles : 0;
@@ -1967,7 +1967,7 @@ public:
         const UINT available = ok && first < tiling.subresources.size() ? UINT(tiling.subresources.size() - first) : 0;
         const UINT n = tilings ? std::min(*count, available) : 0;
         for (UINT i = 0; i < n; ++i) {
-            const leonida::SubresourceTiling& s = tiling.subresources[first + i];
+            const recity::SubresourceTiling& s = tiling.subresources[first + i];
             tilings[i] = {s.width, UINT16(s.height), UINT16(s.depth), s.start};
         }
         *count = n;
@@ -2081,7 +2081,7 @@ public:
             const UINT index = first + i, plane = index / per_plane, mip = index % mips;
             const VkImageAspectFlags aspect =
                 planes == 2 ? (plane ? VK_IMAGE_ASPECT_STENCIL_BIT : VK_IMAGE_ASPECT_DEPTH_BIT) : format.aspects;
-            const leonida::BlockFormat block = leonida::block_format(format.format, aspect);
+            const recity::BlockFormat block = recity::block_format(format.format, aspect);
             if (!block.bytes) return fail();
             const UINT width = std::max<UINT>(1, UINT(desc->Width >> mip)), height = std::max<UINT>(1, desc->Height >> mip);
             const UINT blocks_wide = (width + block.block - 1) / block.block;
@@ -2666,9 +2666,9 @@ private:
     // shown leaves the slot a null descriptor.
     void write_image_descriptor(const Resource& resource, const TextureView& view,
                                 D3D12_CPU_DESCRIPTOR_HANDLE destination, bool storage) {
-        leonida::gfx10::Image image{};
+        recity::gfx10::Image image{};
         if (!image_descriptor(resource, view, image)) return;
-        const leonida::gfx10::ImageWords words = leonida::gfx10::encode(image);
+        const recity::gfx10::ImageWords words = recity::gfx10::encode(image);
         std::memcpy(reinterpret_cast<void*>(destination.ptr), words.data(), sizeof(words));
         state_.bind_image(words, image, resource.image(), resource.format(), resource.aspects(), storage);
     }
@@ -2691,7 +2691,7 @@ private:
                 return E_INVALIDARG;  // 64KB_STANDARD_SWIZZLE too: CheckFeatureSupport reports it unsupported
             }
             backing.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-            leonida::ResourceTiling tiling;
+            recity::ResourceTiling tiling;
             backing.MipLevels = std::max<UINT16>(desc->MipLevels, 1);  // any count: only the format is checked here
             if (!resource_tiling(backing, tiling)) {
                 log_once("reserved texture format has no tile shape:", desc->Format);
@@ -2716,26 +2716,26 @@ private:
 
     // The tiling of a reserved resource's description; false for formats without a tile shape (three- and
     // twelve-byte texels, two-plane depth-stencil).
-    static bool resource_tiling(const D3D12_RESOURCE_DESC& desc, leonida::ResourceTiling& out) {
-        leonida::TilingDesc tiling{};
+    static bool resource_tiling(const D3D12_RESOURCE_DESC& desc, recity::ResourceTiling& out) {
+        recity::TilingDesc tiling{};
         tiling.width = desc.Width;
         tiling.height = desc.Height;
         tiling.depth_or_layers = desc.DepthOrArraySize;
         tiling.mips = desc.MipLevels;
         if (desc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER) {
-            tiling.kind = leonida::TiledKind::buffer;
-            return leonida::resource_tiling(tiling, out);
+            tiling.kind = recity::TiledKind::buffer;
+            return recity::resource_tiling(tiling, out);
         }
         if (desc.Dimension != D3D12_RESOURCE_DIMENSION_TEXTURE2D && desc.Dimension != D3D12_RESOURCE_DIMENSION_TEXTURE3D)
             return false;
-        tiling.kind = desc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D ? leonida::TiledKind::texture3d
-                                                                           : leonida::TiledKind::texture2d;
+        tiling.kind = desc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D ? recity::TiledKind::texture3d
+                                                                           : recity::TiledKind::texture2d;
         const Format format = vulkan_format(desc.Format, false);
         if (!format.format || (format.aspects & VK_IMAGE_ASPECT_STENCIL_BIT)) return false;
-        const leonida::BlockFormat block = leonida::block_format(format.format, format.aspects);
+        const recity::BlockFormat block = recity::block_format(format.format, format.aspects);
         tiling.element_bytes = block.bytes;
         tiling.block = block.block;
-        return leonida::resource_tiling(tiling, out);
+        return recity::resource_tiling(tiling, out);
     }
 
     // Host image copies are used only on images in GENERAL (D3D12's COMMON), so GENERAL must be a layout the
@@ -2869,7 +2869,7 @@ bool device_upload_in_vram(ID3D12Device* device) {
 }
 
 namespace {
-const leonida::BindlessSet* bindless_of(ID3D12Device* device) {
+const recity::BindlessSet* bindless_of(ID3D12Device* device) {
     if (!device) return nullptr;
     ID3D12Device* real = rt::d3d12_xs::device_proxy_real_device(device);
     const Device* d = Device::from<Device>(real ? real : device);
@@ -2878,16 +2878,16 @@ const leonida::BindlessSet* bindless_of(ID3D12Device* device) {
 } // namespace
 
 VkDescriptorSet bindless_set(ID3D12Device* device) {
-    const leonida::BindlessSet* set = bindless_of(device);
+    const recity::BindlessSet* set = bindless_of(device);
     return set ? set->set() : VK_NULL_HANDLE;
 }
 
 VkDescriptorSetLayout bindless_set_layout(ID3D12Device* device) {
-    const leonida::BindlessSet* set = bindless_of(device);
+    const recity::BindlessSet* set = bindless_of(device);
     return set ? set->layout() : VK_NULL_HANDLE;
 }
 
-// Creates its own Vulkan 1.3 instance and device. LEONIDA_VK_VALIDATION=1 adds VK_LAYER_KHRONOS_validation.
+// Creates its own Vulkan 1.3 instance and device. RECITY_VK_VALIDATION=1 adds VK_LAYER_KHRONOS_validation.
 HRESULT create_vulkan_device_standalone(REFIID riid, void** out) {
     if (!out) return E_POINTER;
     *out = nullptr;
@@ -2912,7 +2912,7 @@ HRESULT create_vulkan_device_standalone(REFIID riid, void** out) {
     validation_features.pEnabledValidationFeatures = &sync_validation;
     char validation[8] = {};
     size_t length = 0;
-    if (getenv_s(&length, validation, "LEONIDA_VK_VALIDATION") == 0 && length > 1 && validation[0] != '0') {
+    if (getenv_s(&length, validation, "RECITY_VK_VALIDATION") == 0 && length > 1 && validation[0] != '0') {
         instance_info.pNext = &validation_features;
         instance_info.enabledLayerCount = 1;
         instance_info.ppEnabledLayerNames = &layer;
@@ -2929,15 +2929,15 @@ HRESULT create_vulkan_device_standalone(REFIID riid, void** out) {
         return E_FAIL;
     };
 
-#define LEONIDA_INSTANCE(name) const auto name = reinterpret_cast<PFN_##name>(get(owned.instance, #name))
-    LEONIDA_INSTANCE(vkEnumeratePhysicalDevices);
-    LEONIDA_INSTANCE(vkGetPhysicalDeviceProperties);
-    LEONIDA_INSTANCE(vkGetPhysicalDeviceQueueFamilyProperties);
-    LEONIDA_INSTANCE(vkGetPhysicalDeviceFeatures2);
-    LEONIDA_INSTANCE(vkEnumerateDeviceExtensionProperties);
-    LEONIDA_INSTANCE(vkCreateDevice);
-    LEONIDA_INSTANCE(vkGetDeviceProcAddr);
-#undef LEONIDA_INSTANCE
+#define RECITY_INSTANCE(name) const auto name = reinterpret_cast<PFN_##name>(get(owned.instance, #name))
+    RECITY_INSTANCE(vkEnumeratePhysicalDevices);
+    RECITY_INSTANCE(vkGetPhysicalDeviceProperties);
+    RECITY_INSTANCE(vkGetPhysicalDeviceQueueFamilyProperties);
+    RECITY_INSTANCE(vkGetPhysicalDeviceFeatures2);
+    RECITY_INSTANCE(vkEnumerateDeviceExtensionProperties);
+    RECITY_INSTANCE(vkCreateDevice);
+    RECITY_INSTANCE(vkGetDeviceProcAddr);
+#undef RECITY_INSTANCE
     std::uint32_t count = 0;
     vkEnumeratePhysicalDevices(owned.instance, &count, nullptr);
     std::vector<VkPhysicalDevice> physicals(count);

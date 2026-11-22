@@ -20,10 +20,10 @@
 #include <unordered_map>
 #include <vector>
 
-namespace leonida {
+namespace recity {
 
 struct VulkanDeviceFunctions {
-#define LEONIDA_VK_DEVICE_FUNCTIONS(X)                                                                         \
+#define RECITY_VK_DEVICE_FUNCTIONS(X)                                                                         \
     X(vkCreateCommandPool) X(vkDestroyCommandPool) X(vkAllocateCommandBuffers) X(vkResetCommandBuffer)         \
     X(vkBeginCommandBuffer) X(vkEndCommandBuffer) X(vkQueueSubmit) X(vkQueueWaitIdle) X(vkCreateSemaphore)     \
     X(vkDestroySemaphore) X(vkGetSemaphoreCounterValue) X(vkWaitSemaphores) X(vkSignalSemaphore)               \
@@ -37,17 +37,17 @@ struct VulkanDeviceFunctions {
     X(vkCmdBeginConditionalRenderingEXT) X(vkCmdEndConditionalRenderingEXT) X(vkCreateQueryPool)            \
     X(vkDestroyQueryPool) X(vkCmdResetQueryPool) X(vkCmdBeginQuery) X(vkCmdEndQuery) X(vkCmdWriteTimestamp) \
     X(vkCmdCopyQueryPoolResults)
-#define LEONIDA_VK_MEMBER(name) PFN_##name name = nullptr;
-    LEONIDA_VK_DEVICE_FUNCTIONS(LEONIDA_VK_MEMBER)
-#undef LEONIDA_VK_MEMBER
+#define RECITY_VK_MEMBER(name) PFN_##name name = nullptr;
+    RECITY_VK_DEVICE_FUNCTIONS(RECITY_VK_MEMBER)
+#undef RECITY_VK_MEMBER
 
     // The Vulkan 1.3 entry points may be null on older devices, the extension ones (conditional rendering) when the
     // extension is not enabled, and the query functions are optional (a list that uses queries without them is
     // unsupported); everything else is required.
     bool load(PFN_vkGetDeviceProcAddr get, VkDevice device) {
-#define LEONIDA_VK_LOAD(name) name = reinterpret_cast<PFN_##name>(get(device, #name));
-        LEONIDA_VK_DEVICE_FUNCTIONS(LEONIDA_VK_LOAD)
-#undef LEONIDA_VK_LOAD
+#define RECITY_VK_LOAD(name) name = reinterpret_cast<PFN_##name>(get(device, #name));
+        RECITY_VK_DEVICE_FUNCTIONS(RECITY_VK_LOAD)
+#undef RECITY_VK_LOAD
         return vkCreateCommandPool && vkDestroyCommandPool && vkAllocateCommandBuffers && vkResetCommandBuffer &&
                vkBeginCommandBuffer && vkEndCommandBuffer && vkQueueSubmit && vkQueueWaitIdle && vkCreateSemaphore &&
                vkDestroySemaphore && vkGetSemaphoreCounterValue && vkWaitSemaphores && vkSignalSemaphore &&
@@ -434,4 +434,4 @@ private:
     bool ok_ = false;
 };
 
-} // namespace leonida
+} // namespace recity

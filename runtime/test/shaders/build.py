@@ -89,7 +89,7 @@ def translate_tests(work, names):
         else:
             (work / (n + ".dxbc")).write_bytes(bytes(32))  # chunk count 0
     cmd = [sys.executable, "-I", TRANSLATOR, disasm, "--out", spirv]
-    if os.environ.get("LEONIDA_W64_EMULATE") == "1":   # wave64 on 32-wide subgroups (compute shaders only)
+    if os.environ.get("RECITY_W64_EMULATE") == "1":   # wave64 on 32-wide subgroups (compute shaders only)
         cmd.append("--wave64-emulate")
     return subprocess.run(cmd).returncode
 

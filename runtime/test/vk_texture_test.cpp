@@ -245,7 +245,7 @@ int main(int argc, char** argv) {
     VkBufferDeviceAddressInfo bdai{VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO}; bdai.buffer = heap;
     VkDeviceAddress heap_base = vkGetBufferDeviceAddress(dev, &bdai);
     // Descriptor hash table: 16 slots.
-    leonida::DescriptorTable desc_table(16);
+    recity::DescriptorTable desc_table(16);
     desc_table.insert(tsharp, 1);
     desc_table.insert(ssharp, 1);
     const auto table = desc_table.build_gpu_buffer(true);

@@ -5,7 +5,7 @@
 // resolves a multisampled target. Part D records every D3D12 sync/access pair as enhanced barriers, which the
 // validation layer must accept. Part E (where VK_EXT_conditional_rendering is available) checks SetPredication.
 // Part F (D3D-26) runs immediate buffer writes, atomic copies and discards.
-// Set LEONIDA_VK_VALIDATION=1 to run under VK_LAYER_KHRONOS_validation; any validation error fails the test.
+// Set RECITY_VK_VALIDATION=1 to run under VK_LAYER_KHRONOS_validation; any validation error fails the test.
 #include "vk_test_device.h"
 #include "../src/vulkan_replay.h"
 
@@ -21,7 +21,7 @@
 
 namespace {
 
-using namespace leonida;
+using namespace recity;
 namespace s = d3d12_state;
 
 using Rgba = std::array<std::uint8_t, 4>;
@@ -464,7 +464,7 @@ int part_c(vktest::Device& d) {
 
 // Part D: every D3D12 sync bit against every access bit, as global, buffer and texture barriers. Whatever pair the
 // application names, the Vulkan barrier must be valid, so every access has a stage in its scope that can perform it
-// (vulkan_barrier_scope). Under LEONIDA_VK_VALIDATION=1 a pair that breaks that rule is a validation error. The
+// (vulkan_barrier_scope). Under RECITY_VK_VALIDATION=1 a pair that breaks that rule is a validation error. The
 // image is simultaneous-access, so it stays in GENERAL, which every access may use: only the stage/access rule is
 // under test.
 int part_d(vktest::Device& d) {

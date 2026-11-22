@@ -143,7 +143,7 @@ class Wave64Checks(unittest.TestCase):
         self.assertIn(f"{TOTAL - 3} of {TOTAL} pass, 3 skipped", out)
 
     def test_emulated_wave64_runs_without_a_64_wide_subgroup(self):
-        # LEONIDA_W64_EMULATE=1: the shaders were translated with --wave64-emulate, so no wave64 test asks the
+        # RECITY_W64_EMULATE=1: the shaders were translated with --wave64-emulate, so no wave64 test asks the
         # harness for a 64-wide subgroup, and a 32-wide device runs them all.
         unsupported = 77, "full 64-wide compute subgroups unavailable\n"
         status, out = self.run_checks(unsupported, unsupported, emulated=True)

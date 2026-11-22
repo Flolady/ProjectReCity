@@ -561,7 +561,7 @@ def _build_glb_with_stats(
     primitives: list[dict],
     materials: dict[str, dict] | None = None,
     *,
-    generator: str = "Leonida glb_writer",
+    generator: str = "ReCity glb_writer",
 ) -> tuple[bytes, dict]:
     non_empty: list[dict] = []
     for prim in primitives:
@@ -833,7 +833,7 @@ def build_glb(
     primitives: list[dict],
     materials: dict[str, dict] | None = None,
     *,
-    generator: str = "Leonida glb_writer",
+    generator: str = "ReCity glb_writer",
 ) -> bytes:
     """Serialize glTF-ready primitives and optional PNG materials into binary .glb bytes."""
     glb_bytes, _ = _build_glb_with_stats(primitives, materials, generator=generator)

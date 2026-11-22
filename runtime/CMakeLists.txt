@@ -191,15 +191,15 @@ if(WIN32)
   # GameInput shim on SDL3 (zlib licence): any controller SDL supports, DualSense trigger effects and lightbar.
   # Nothing is downloaded unless asked. The shim is built when SDL3 is available:
   #   - an installed SDL3 3.2+ that find_package finds (SDL3_DIR / CMAKE_PREFIX_PATH), or
-  #   - -DLEONIDA_SDL3_FETCH=ON: download the pinned release below once at configure time (hash-checked) and build it
+  #   - -DRECITY_SDL3_FETCH=ON: download the pinned release below once at configure time (hash-checked) and build it
   #     static, or -DFETCHCONTENT_SOURCE_DIR_SDL3=<extracted SDL3-3.4.20> to build that copy without downloading.
-  # Otherwise, or with -DLEONIDA_SDL3=OFF, gta6rt is built without the shim and the loader binds GameInputCreate to the
+  # Otherwise, or with -DRECITY_SDL3=OFF, gta6rt is built without the shim and the loader binds GameInputCreate to the
   # host's GameInput.dll or the unimplemented thunk as before. docs/gameinput.md has the details.
-  option(LEONIDA_SDL3 "Build the GameInput shim when SDL3 is available" ON)
-  option(LEONIDA_SDL3_FETCH "Download the pinned SDL3 release if no installed SDL3 is found" OFF)
-  if(LEONIDA_SDL3)
+  option(RECITY_SDL3 "Build the GameInput shim when SDL3 is available" ON)
+  option(RECITY_SDL3_FETCH "Download the pinned SDL3 release if no installed SDL3 is found" OFF)
+  if(RECITY_SDL3)
     find_package(SDL3 3.2 CONFIG QUIET COMPONENTS SDL3-static)
-    if(NOT TARGET SDL3::SDL3-static AND (LEONIDA_SDL3_FETCH OR FETCHCONTENT_SOURCE_DIR_SDL3))
+    if(NOT TARGET SDL3::SDL3-static AND (RECITY_SDL3_FETCH OR FETCHCONTENT_SOURCE_DIR_SDL3))
       include(FetchContent)
       FetchContent_Declare(SDL3
         URL https://github.com/libsdl-org/SDL/releases/download/release-3.4.20/SDL3-3.4.20.tar.gz
@@ -219,7 +219,7 @@ if(WIN32)
       FetchContent_MakeAvailable(SDL3)
     endif()
   endif()
-  if(LEONIDA_SDL3 AND TARGET SDL3::SDL3-static)
+  if(RECITY_SDL3 AND TARGET SDL3::SDL3-static)
     target_sources(gta6rt PRIVATE shims/gameinput.cpp)
     target_link_libraries(gta6rt PRIVATE SDL3::SDL3-static)
 
@@ -235,11 +235,11 @@ if(WIN32)
       target_link_libraries(${_gi} PRIVATE SDL3::SDL3-static)
     endforeach()
   else()
-    if(LEONIDA_SDL3)
-      message(STATUS "GameInput shim not built: no installed SDL3 found. Set SDL3_DIR, or pass -DLEONIDA_SDL3_FETCH=ON "
+    if(RECITY_SDL3)
+      message(STATUS "GameInput shim not built: no installed SDL3 found. Set SDL3_DIR, or pass -DRECITY_SDL3_FETCH=ON "
                      "to download the pinned SDL3 release (see docs/gameinput.md)")
     else()
-      message(STATUS "GameInput shim not built (LEONIDA_SDL3=OFF)")
+      message(STATUS "GameInput shim not built (RECITY_SDL3=OFF)")
     endif()
   endif()
 
@@ -295,7 +295,7 @@ if(BUILD_TESTING)
     )
 
     # pe_loader.cpp needs the shim registry for shims::find/make_unimplemented_thunk. The xmem and d3d12_xs tables
-    # are linked too so the optional LEONIDA_GAME_DIR run classifies the shipped modules' imports exactly like
+    # are linked too so the optional RECITY_GAME_DIR run classifies the shipped modules' imports exactly like
     # gta6rt does (no d3d12.lib is needed: d3d12_xs resolves its host entry points at run time).
     add_executable(pe_loader_test
       test/pe_loader_test.cpp
@@ -385,7 +385,7 @@ if(BUILD_TESTING)
       COMMAND loader_tls_test "$<TARGET_FILE:tiny_tls>"
     )
 
-    # LEONIDA_UNIMPLEMENTED=log|fail|stop: builds its own image with two imports that bind to nothing, calls them in
+    # RECITY_UNIMPLEMENTED=log|fail|stop: builds its own image with two imports that bind to nothing, calls them in
     # process (log, fail) and in child processes (default/env parsing, stop). No game files, no GPU.
     add_executable(unimplemented_policy_test
       test/unimplemented_policy_test.cpp
@@ -394,12 +394,12 @@ if(BUILD_TESTING)
     )
     # The register-preservation check needs a caller that sets rbx/rbp/rdi/rsi/r12-r15 and xmm6-15, which MSVC x64
     # cannot do inline: test/fixtures/abi_probe.asm (MASM). Without ml64 the rest of the test still runs.
-    find_program(LEONIDA_ML64 ml64)  # CMake would otherwise pick the 32-bit ml with the Ninja generator
-    if(LEONIDA_ML64)
-      set(CMAKE_ASM_MASM_COMPILER "${LEONIDA_ML64}")
+    find_program(RECITY_ML64 ml64)  # CMake would otherwise pick the 32-bit ml with the Ninja generator
+    if(RECITY_ML64)
+      set(CMAKE_ASM_MASM_COMPILER "${RECITY_ML64}")
       enable_language(ASM_MASM)
       target_sources(unimplemented_policy_test PRIVATE test/fixtures/abi_probe.asm)
-      target_compile_definitions(unimplemented_policy_test PRIVATE LEONIDA_HAVE_ABI_PROBE=1)
+      target_compile_definitions(unimplemented_policy_test PRIVATE RECITY_HAVE_ABI_PROBE=1)
     else()
       message(STATUS "ml64 not found: unimplemented_policy_test skips the register-preservation check")
     endif()
@@ -427,7 +427,7 @@ if(BUILD_TESTING)
   add_executable(descriptor_table_test test/descriptor_table_test.cpp)
   add_test(NAME descriptor_table COMMAND descriptor_table_test)
   if(WIN32)
-    # Optional: skips unless LEONIDA_GAME_DIR and LEONIDA_MOVIE are set.
+    # Optional: skips unless RECITY_GAME_DIR and RECITY_MOVIE are set.
     add_executable(bink_decode_test
       test/bink_decode_test.cpp
       src/pe_loader.cpp
@@ -442,7 +442,7 @@ if(BUILD_TESTING)
     add_dependencies(bink_decode_test gta6rt_tls_host)
     add_test(NAME bink_decode COMMAND bink_decode_test)
 
-    # Optional: skips unless LEONIDA_GAME_DIR is set. Drives the package's FSR DLL on the Xbox-ABI device proxy.
+    # Optional: skips unless RECITY_GAME_DIR is set. Drives the package's FSR DLL on the Xbox-ABI device proxy.
     if(D3D12_LIBRARY AND DXGI_LIBRARY)
       add_executable(fsr_dispatch_test
         test/fsr_dispatch_test.cpp
@@ -458,7 +458,7 @@ if(BUILD_TESTING)
       target_link_libraries(fsr_dispatch_test PRIVATE gta6rt_d3d12_xs_rootsig ${D3D12_LIBRARY} ${DXGI_LIBRARY} psapi)
       add_test(NAME fsr_dispatch COMMAND fsr_dispatch_test)
 
-      # Optional: skips unless LEONIDA_GAME_DIR is set. Constructs the package's XboxBvhBuilder on the device proxy.
+      # Optional: skips unless RECITY_GAME_DIR is set. Constructs the package's XboxBvhBuilder on the device proxy.
       add_executable(bvh_builder_test
         test/bvh_builder_test.cpp
         src/pe_loader.cpp
@@ -474,7 +474,7 @@ if(BUILD_TESTING)
       add_test(NAME bvh_builder COMMAND bvh_builder_test)
     endif()
 
-    # Optional: skips unless LEONIDA_GAME_DIR and LEONIDA_MOVIE_AUDIO are set.
+    # Optional: skips unless RECITY_GAME_DIR and RECITY_MOVIE_AUDIO are set.
     add_executable(bink_audio_test
       test/bink_audio_test.cpp
       src/pe_loader.cpp
@@ -517,8 +517,8 @@ if(BUILD_TESTING)
 endif()
 
 if(WIN32)
-option(LEONIDA_D3D12_SHIM_TESTS "Build the standalone D3D12 root-signature shim test" OFF)
-if(LEONIDA_D3D12_SHIM_TESTS)
+option(RECITY_D3D12_SHIM_TESTS "Build the standalone D3D12 root-signature shim test" OFF)
+if(RECITY_D3D12_SHIM_TESTS)
   enable_testing()
   add_executable(d3d12_xs_root_signature_test
     test/d3d12_xs_root_signature_test.cpp
@@ -562,17 +562,17 @@ if(TARGET Vulkan::Headers)
   # time (tools/gen_d3d12_stubs.py), so nothing derived from the SDK header is checked in.
   find_package(Python3 COMPONENTS Interpreter QUIET)
   if(WIN32 AND Python3_FOUND)
-    set(LEONIDA_STUBS ${CMAKE_CURRENT_BINARY_DIR}/generated/d3d12_stubs.h)
+    set(RECITY_STUBS ${CMAKE_CURRENT_BINARY_DIR}/generated/d3d12_stubs.h)
     add_custom_command(
-      OUTPUT ${LEONIDA_STUBS}
-      COMMAND Python3::Interpreter -I ${CMAKE_CURRENT_SOURCE_DIR}/../tools/gen_d3d12_stubs.py --out ${LEONIDA_STUBS}
+      OUTPUT ${RECITY_STUBS}
+      COMMAND Python3::Interpreter -I ${CMAKE_CURRENT_SOURCE_DIR}/../tools/gen_d3d12_stubs.py --out ${RECITY_STUBS}
               ID3D12GraphicsCommandList8 ID3D12CommandQueue ID3D12CommandAllocator ID3D12Fence1
               ID3D12Device11 ID3D12DescriptorHeap ID3D12Resource ID3D12QueryHeap
       DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/../tools/gen_d3d12_stubs.py
       COMMENT "Generating D3D12 COM stubs"
       VERBATIM)
     add_library(gta6rt_d3d12_com STATIC shims/d3d12_com.cpp shims/d3d12_vulkan_device.cpp shims/d3d12_xs_device.cpp
-                ${LEONIDA_STUBS})   # d3d12_vulkan_device.cpp reads the PC device behind the proxy (#224)
+                ${RECITY_STUBS})   # d3d12_vulkan_device.cpp reads the PC device behind the proxy (#224)
     target_include_directories(gta6rt_d3d12_com PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
     target_link_libraries(gta6rt_d3d12_com PUBLIC Vulkan::Headers)
     target_compile_definitions(gta6rt_d3d12_com PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
@@ -629,16 +629,16 @@ if(TARGET Vulkan::Headers)
       find_program(Vulkan_GLSLANG_VALIDATOR_EXECUTABLE glslangValidator HINTS "$ENV{VULKAN_SDK}/Bin" "$ENV{VULKAN_SDK}/bin")
     endif()
     if(Vulkan_GLSLANG_VALIDATOR_EXECUTABLE)
-      set(LEONIDA_TEST_CS_SAMPLE ${CMAKE_CURRENT_BINARY_DIR}/generated/cs_sample.spv)
+      set(RECITY_TEST_CS_SAMPLE ${CMAKE_CURRENT_BINARY_DIR}/generated/cs_sample.spv)
       add_custom_command(
-        OUTPUT ${LEONIDA_TEST_CS_SAMPLE}
-        COMMAND ${Vulkan_GLSLANG_VALIDATOR_EXECUTABLE} -V --target-env vulkan1.3 -o ${LEONIDA_TEST_CS_SAMPLE}
+        OUTPUT ${RECITY_TEST_CS_SAMPLE}
+        COMMAND ${Vulkan_GLSLANG_VALIDATOR_EXECUTABLE} -V --target-env vulkan1.3 -o ${RECITY_TEST_CS_SAMPLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/test/glsl/cs_sample.comp
         DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/test/glsl/cs_sample.comp
         COMMENT "Compiling the descriptor test shader"
         VERBATIM)
-      target_sources(d3d12_descriptor_test PRIVATE ${LEONIDA_TEST_CS_SAMPLE})
-      target_compile_definitions(d3d12_descriptor_test PRIVATE LEONIDA_TEST_CS_SAMPLE_SPV="${LEONIDA_TEST_CS_SAMPLE}")
+      target_sources(d3d12_descriptor_test PRIVATE ${RECITY_TEST_CS_SAMPLE})
+      target_compile_definitions(d3d12_descriptor_test PRIVATE RECITY_TEST_CS_SAMPLE_SPV="${RECITY_TEST_CS_SAMPLE}")
     else()
       message(STATUS "glslangValidator not found: d3d12_descriptor_test skips its shader")
     endif()
@@ -668,15 +668,15 @@ if(TARGET Vulkan::Headers)
     target_compile_definitions(d3d12_node_mask_test PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
     target_compile_options(d3d12_node_mask_test PRIVATE /W4 /permissive- /utf-8)
 
-    # The loader can create this device instead of the host's (D3D12XboxCreateDevice, LEONIDA_D3D12=vulkan).
+    # The loader can create this device instead of the host's (D3D12XboxCreateDevice, RECITY_D3D12=vulkan).
     if(TARGET gta6rt)
       target_link_libraries(gta6rt PRIVATE gta6rt_d3d12_com)
-      target_compile_definitions(gta6rt PRIVATE LEONIDA_VULKAN_DEVICE)
+      target_compile_definitions(gta6rt PRIVATE RECITY_VULKAN_DEVICE)
     endif()
-    # bvh_builder_test can put the package's XboxBvhBuilder on this device too (LEONIDA_BVH_DEVICE=vulkan).
+    # bvh_builder_test can put the package's XboxBvhBuilder on this device too (RECITY_BVH_DEVICE=vulkan).
     if(TARGET bvh_builder_test)
       target_link_libraries(bvh_builder_test PRIVATE gta6rt_d3d12_com)
-      target_compile_definitions(bvh_builder_test PRIVATE LEONIDA_VULKAN_DEVICE)
+      target_compile_definitions(bvh_builder_test PRIVATE RECITY_VULKAN_DEVICE)
     endif()
   else()
     message(STATUS "Python 3 or Windows missing: the D3D12 COM objects and d3d12_com_test are not built")

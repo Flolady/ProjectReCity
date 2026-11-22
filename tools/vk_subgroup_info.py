@@ -4,7 +4,7 @@
 
 make_game.py uses it to choose between native wave64 translation and --wave64-emulate. It talks to the system's
 Vulkan implementation through ctypes (standard library only), so it works before the runtime stage has built anything.
-On macOS it opens MoltenVK directly, using the same LEONIDA_VULKAN_LOADER override as the C++ test tools.
+On macOS it opens MoltenVK directly, using the same RECITY_VULKAN_LOADER override as the C++ test tools.
 
 Device choice follows the runtime (runtime/shims/d3d12_vulkan_device.cpp): Vulkan 1.3 devices with dynamicRendering,
 synchronization2, timelineSemaphore and separateDepthStencilLayouts and a graphics queue family; a discrete GPU wins
@@ -90,7 +90,7 @@ def load_vulkan():
     if os.name == "nt":
         names = ["vulkan-1.dll"]
     elif sys.platform == "darwin":
-        override = os.environ.get("LEONIDA_VULKAN_LOADER")
+        override = os.environ.get("RECITY_VULKAN_LOADER")
         names = [override] if override else ["libMoltenVK.dylib", "/opt/homebrew/lib/libMoltenVK.dylib"]
     else:
         names = ["libvulkan.so.1", "libvulkan.1.dylib"]
@@ -133,7 +133,7 @@ def query() -> dict:
     vk.vkGetPhysicalDeviceFeatures2.argtypes = [vp, vp]
     vk.vkGetPhysicalDeviceQueueFamilyProperties.argtypes = [vp, vp, vp]
     vk.vkDestroyInstance.argtypes = [vp, vp]
-    app = AppInfo(VK_STRUCTURE_TYPE_APPLICATION_INFO, None, b"leonida-subgroup-info", 1, None, 0, VK_API_VERSION_1_3)
+    app = AppInfo(VK_STRUCTURE_TYPE_APPLICATION_INFO, None, b"recity-subgroup-info", 1, None, 0, VK_API_VERSION_1_3)
     info = InstanceInfo(VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO, None, 0, ctypes.pointer(app), 0, None, 0, None)
     inst = ctypes.c_void_p()
     r = vk.vkCreateInstance(ctypes.byref(info), None, ctypes.byref(inst))

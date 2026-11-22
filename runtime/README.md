@@ -61,10 +61,10 @@ After the totals the report counts the unimplemented imports by return class, an
 unimplemented by return policy: hresult=1 other=0
 ```
 
-### Unimplemented imports at run time: `LEONIDA_UNIMPLEMENTED`
+### Unimplemented imports at run time: `RECITY_UNIMPLEMENTED`
 
 An import with no shim, host function or bundled module is bound to a thunk. What a call to it does is set by the
-environment variable `LEONIDA_UNIMPLEMENTED`, read once per process:
+environment variable `RECITY_UNIMPLEMENTED`, read once per process:
 
 | value | a call to the thunk |
 |---|---|
@@ -130,7 +130,7 @@ Current limits, by design:
   `D3D12CreateRootSignatureDeserializer`, with the console root-signature high byte (`0x03000000`)
   cleared on a copy before forwarding to the PC `d3d12.dll`. `D3D12XboxCreateDevice` wraps a device in
   the measured-slot Xbox-ABI proxy: the host PC `ID3D12Device` by default, or the Vulkan-backed device
-  (`shims/d3d12_vulkan_device.cpp`) when `LEONIDA_D3D12=vulkan` is set and the runtime was built with the
+  (`shims/d3d12_vulkan_device.cpp`) when `RECITY_D3D12=vulkan` is set and the runtime was built with the
   Vulkan SDK and Python 3. The Vulkan device covers command submission, descriptor heaps, render-target and
   depth views, committed resources and copies (uploads, readbacks, BC textures); see `docs/d3d12_vulkan.md`
   section 3.2 for what is missing.
@@ -138,8 +138,8 @@ Current limits, by design:
 - `gameinput.dll` / `xgameruntime.dll` — `GameInputCreate`: the v0 GameInput API for gamepads on SDL3
   (`shims/gameinput.cpp`), so any controller SDL supports works, with rumble, Xbox trigger rumble, and on a
   DualSense adaptive-trigger effects and the lightbar. Optional and CMake-only: built when an installed SDL3 is found,
-  or with `-DLEONIDA_SDL3_FETCH=ON` to download the pinned release; nothing is downloaded otherwise, and the
-  `scripts/build_runtime.ps1` cl.exe fallback never builds it. See [docs/gameinput.md](../docs/gameinput.md) for the mapping, the `LEONIDA_DS_*` settings and what is
+  or with `-DRECITY_SDL3_FETCH=ON` to download the pinned release; nothing is downloaded otherwise, and the
+  `scripts/build_runtime.ps1` cl.exe fallback never builds it. See [docs/gameinput.md](../docs/gameinput.md) for the mapping, the `RECITY_DS_*` settings and what is
   unverified.
 
 The two serializer functions and `D3D12XboxCreateDevice` are the only `d3d12_xs` imports used by the
@@ -162,7 +162,7 @@ when the Vulkan SDK is found:
 - `vk_texture_test`, `vk_compute_test`, `vk_store_test` — texture, LDS/compute, and buffer-store paths.
 - `vk_command_replay_test`, `d3d12_com_test`, `d3d12_vulkan_device_test` — the D3D12 command path on
   Vulkan: replay, the COM command objects, and the Vulkan device behind the Xbox-ABI proxy. Set
-  `LEONIDA_VK_VALIDATION=1` to run them under the Khronos validation layer.
+  `RECITY_VK_VALIDATION=1` to run them under the Khronos validation layer.
 - `vk_pipeline_check <spirv dir> [cache.bin] [--jobs N] [--start I] [--count N] [--max-bytes N]` -
   creates a shader module and, for compute shaders, a pipeline for every entry in the translator's
   `index.json`; reports `MODULE FAIL` / `PIPELINE FAIL` per shader and a summary. `--max-bytes`
@@ -183,7 +183,7 @@ motor and trigger.
 back to the caller.
 
 The PE-loader and Bink-decode tests that need the retail package are optional: when
-`LEONIDA_GAME_DIR` (and, for Bink, `LEONIDA_MOVIE`) is unset they print `SKIP` and exit 0. They read
+`RECITY_GAME_DIR` (and, for Bink, `RECITY_MOVIE`) is unset they print `SKIP` and exit 0. They read
 the files in place and never copy or commit game data.
 
 ## Current limits
@@ -203,10 +203,10 @@ No game data, keys, or extracted assets belong in this directory or in the repos
 ### First-boot D3D12 trace
 
 On a Vulkan-enabled build, select the Vulkan backend to trace device, command-list and queue calls handled
-by Leonida. Put `--trace-d3d12` before the separator for game arguments.
+by ReCity. Put `--trace-d3d12` before the separator for game arguments.
 
 ```powershell
-$env:LEONIDA_D3D12 = 'vulkan'
+$env:RECITY_D3D12 = 'vulkan'
 .\runtime\build\gta6rt.exe --run $gameExe --trace-d3d12 2>&1 |
     Select-String '^\[d3d12-trace\]'
 ```
@@ -224,7 +224,7 @@ The GPU test runs explicitly, while the CPU test is registered in CTest.
 
 ```powershell
 ctest --test-dir runtime/build -C RelWithDebInfo -R '^clear_color$' --output-on-failure
-$env:LEONIDA_VK_VALIDATION = '1'
+$env:RECITY_VK_VALIDATION = '1'
 $env:VK_VALIDATION_VALIDATE_SYNC = '1'
 .\runtime\build\RelWithDebInfo\d3d12_clear_test.exe
 ```
@@ -239,7 +239,7 @@ Other typeless families, typed-resource casts, SINT/SNORM, mip/array expansion, 
 
 ```powershell
 ctest --test-dir runtime/build -C RelWithDebInfo -R '^typeless_rtv$' --output-on-failure
-$env:LEONIDA_VK_VALIDATION = '1'
+$env:RECITY_VK_VALIDATION = '1'
 $env:VK_VALIDATION_VALIDATE_SYNC = '1'
 .\runtime\build\RelWithDebInfo\d3d12_typeless_rtv_test.exe
 ```
@@ -255,6 +255,6 @@ host refuses is skipped, and one only the layer refuses (1D textures today) is l
 Vulkan GPU and runs explicitly.
 
 ```powershell
-$env:LEONIDA_VK_VALIDATION = '1'
+$env:RECITY_VK_VALIDATION = '1'
 .\runtime\build\RelWithDebInfo\d3d12_resource_desc_test.exe
 ```

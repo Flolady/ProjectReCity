@@ -2,10 +2,10 @@
 // (Loader::initialise: TLS and DllMain), and drive it through the public FidelityFX API on a PC D3D12
 // device wrapped in the Xbox-ABI device proxy. It records what the DLL answers and which device slots it calls.
 //
-//   LEONIDA_GAME_DIR=<package root>   (contains amd_fidelityfx_upscaler_xbox.dll)
-//   LEONIDA_FSR_WARP=1                (optional: use the WARP adapter instead of the default hardware adapter)
+//   RECITY_GAME_DIR=<package root>   (contains amd_fidelityfx_upscaler_xbox.dll)
+//   RECITY_FSR_WARP=1                (optional: use the WARP adapter instead of the default hardware adapter)
 //
-// Without LEONIDA_GAME_DIR it prints "SKIP (no package)" and exits 0. Nothing from the DLL is written to disk.
+// Without RECITY_GAME_DIR it prints "SKIP (no package)" and exits 0. Nothing from the DLL is written to disk.
 //
 // Steps, each one only if the previous worked:
 //   1. map: the console imports bind to the shims and nothing is unimplemented
@@ -238,7 +238,7 @@ auto module_tls_index(const M& m, long) -> decltype(m.tls_slot, uint32_t()) { re
 
 int main() {
     std::setvbuf(stdout, nullptr, _IONBF, 0);  // keep every line if the DLL takes the process down
-    const std::string game_dir_arg = env("LEONIDA_GAME_DIR");
+    const std::string game_dir_arg = env("RECITY_GAME_DIR");
     if (game_dir_arg.empty()) {
         std::printf("SKIP (no package)\n");
         return 0;
@@ -247,7 +247,7 @@ int main() {
     const std::filesystem::path dll = game_dir / "amd_fidelityfx_upscaler_xbox.dll";
     std::error_code ec;
     if (!std::filesystem::is_regular_file(dll, ec)) {
-        std::printf("FAIL LEONIDA_GAME_DIR does not contain amd_fidelityfx_upscaler_xbox.dll\n");
+        std::printf("FAIL RECITY_GAME_DIR does not contain amd_fidelityfx_upscaler_xbox.dll\n");
         return 1;
     }
 
@@ -338,7 +338,7 @@ int main() {
         check(!c.faulted && c.rc == ffx::RETURN_OK && rw == 2560 && rh == 1440, "QUALITY at 3840x2160 renders at 2560x1440");
 
         // 5/6 need a device.
-        ID3D12Device* pc = create_pc_device(env("LEONIDA_FSR_WARP") == "1");
+        ID3D12Device* pc = create_pc_device(env("RECITY_FSR_WARP") == "1");
         check(pc != nullptr, "PC D3D12 device created");
         if (!pc) return 1;
         void* proxy = nullptr;

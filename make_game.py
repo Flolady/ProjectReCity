@@ -3,7 +3,7 @@ r"""Build the PC port from your own copy of the game.
     Build.bat                                                   # double-click: finds your copy and builds
     python -I make_game.py                                      # same, from a terminal
     python -I make_game.py --find                               # list the copies found on this PC
-    python -I make_game.py --game "D:\path\to\your\package" --out "D:\Games\Leonida"
+    python -I make_game.py --game "D:\path\to\your\package" --out "D:\Games\ReCity"
     python -I make_game.py --game "..." --check                 # only check the copy, build nothing
     python -I make_game.py --stages shaders,assets              # only some stages
 
@@ -231,7 +231,7 @@ def choose_game() -> str:
 
 
 def default_out() -> str:
-    return os.path.join(os.path.expanduser("~"), "Documents", "Leonida")
+    return os.path.join(os.path.expanduser("~"), "Documents", "ReCity")
 
 
 # ---------------------------------------------------------------- preflight
@@ -753,7 +753,7 @@ def pipelines(work: str, out: str, jobs: "int | None" = None) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser(description="Build the PC port from your own copy of the game.")
     ap.add_argument("--game", help="your package folder (found automatically if left out)")
-    ap.add_argument("--out", help="folder for the finished port (default Documents/Leonida)")
+    ap.add_argument("--out", help="folder for the finished port (default Documents/ReCity)")
     ap.add_argument("--work", help="folder for intermediate files (hundreds of GB; default <out>/work)")
     ap.add_argument("--stages", help="comma list from: " + ",".join(STAGES))
     ap.add_argument("--check", action="store_true", help="only check the game files")

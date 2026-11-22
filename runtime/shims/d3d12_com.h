@@ -5,9 +5,9 @@
 // interfaces as far as is known; docs/d3d12_vulkan.md section 3.1 lists what is still unverified.
 //
 // Contracts with the rest of the layer (the device proxy that will hand these objects out):
-// - an ID3D12Resource's leonida::ResourceId is its pointer value; the device registers it with the VulkanContext;
-// - so is an ID3D12QueryHeap's leonida::QueryHeapId, registered with its VkQueryPool;
-// - the CPU handle of an RTV or DSV points at a leonida::TargetView in the device's descriptor heap.
+// - an ID3D12Resource's recity::ResourceId is its pointer value; the device registers it with the VulkanContext;
+// - so is an ID3D12QueryHeap's recity::QueryHeapId, registered with its VkQueryPool;
+// - the CPU handle of an RTV or DSV points at a recity::TargetView in the device's descriptor heap.
 #pragma once
 
 #include <windows.h>
@@ -18,13 +18,13 @@
 namespace rt::d3d12 {
 
 // `device` (optional) is what the object's GetDevice returns; the object holds a reference to it.
-HRESULT create_command_queue(leonida::VulkanContext& context, VkQueue queue, std::uint32_t queue_family,
+HRESULT create_command_queue(recity::VulkanContext& context, VkQueue queue, std::uint32_t queue_family,
                              const D3D12_COMMAND_QUEUE_DESC& desc, REFIID riid, void** out,
                              IUnknown* device = nullptr);
 HRESULT create_command_allocator(D3D12_COMMAND_LIST_TYPE type, REFIID riid, void** out, IUnknown* device = nullptr);
 HRESULT create_command_list(D3D12_COMMAND_LIST_TYPE type, ID3D12CommandAllocator* allocator, REFIID riid,
                             void** out, IUnknown* device = nullptr);
-HRESULT create_fence(leonida::VulkanContext& context, UINT64 initial_value, D3D12_FENCE_FLAGS flags, REFIID riid,
+HRESULT create_fence(recity::VulkanContext& context, UINT64 initial_value, D3D12_FENCE_FLAGS flags, REFIID riid,
                      void** out, IUnknown* device = nullptr);
 
 // The Vulkan objects a D3D12 device runs on. Vulkan 1.3 with dynamicRendering, synchronization2, timelineSemaphore
@@ -70,7 +70,7 @@ struct VulkanDeviceInfo {
 HRESULT create_vulkan_device(const VulkanDeviceInfo& info, REFIID riid, void** out);
 
 // The same, on a Vulkan instance and device of its own (destroyed with the D3D12 device). Picks the first discrete
-// GPU with the features above. LEONIDA_VK_VALIDATION=1 enables VK_LAYER_KHRONOS_validation.
+// GPU with the features above. RECITY_VK_VALIDATION=1 enables VK_LAYER_KHRONOS_validation.
 HRESULT create_vulkan_device_standalone(REFIID riid, void** out);
 
 // Tells a device from create_vulkan_device* that `outer` (the Xbox-ABI proxy that owns it) is what its children's
@@ -94,7 +94,7 @@ std::uint32_t device_max_push_constants_size(ID3D12Device* device);
 bool device_push_constants_need_fallback(ID3D12Device* device);
 
 // True when `device` puts upload-heap buffers in DEVICE_LOCAL | HOST_VISIBLE memory: its GPU has Resizable BAR and
-// LEONIDA_UPLOAD_SYSMEM is not set (D3D-96).
+// RECITY_UPLOAD_SYSMEM is not set (D3D-96).
 bool device_upload_in_vram(ID3D12Device* device);
 
 // The bindless set 0 a device with VulkanDeviceInfo::bindless keeps (vulkan_bindless.h), and its layout: what a
@@ -104,20 +104,20 @@ VkDescriptorSet bindless_set(ID3D12Device* device);
 VkDescriptorSetLayout bindless_set_layout(ID3D12Device* device);
 
 // ExecuteCommandLists returns void; this is what the last call on the queue did.
-leonida::ReplayResult last_execute_result(ID3D12CommandQueue* queue);
+recity::ReplayResult last_execute_result(ID3D12CommandQueue* queue);
 
 // The front/back stencil references last recorded by ID3D12GraphicsCommandList8::OMSetFrontAndBackStencilRef on
 // `list`. The values are kept for the future pipeline path, which is what would apply them. False when `list` is
 // not one of this module's command lists.
 bool front_back_stencil_ref(ID3D12GraphicsCommandList8* list, UINT& front, UINT& back);
 
-inline leonida::ResourceId resource_id(const ID3D12Resource* resource) {
-    return reinterpret_cast<leonida::ResourceId>(resource);
+inline recity::ResourceId resource_id(const ID3D12Resource* resource) {
+    return reinterpret_cast<recity::ResourceId>(resource);
 }
 
 // A query heap's ID in the command-list IR and the VulkanContext: its pointer value, as for resources.
-inline leonida::QueryHeapId query_heap_id(const ID3D12QueryHeap* heap) {
-    return reinterpret_cast<leonida::QueryHeapId>(heap);
+inline recity::QueryHeapId query_heap_id(const ID3D12QueryHeap* heap) {
+    return reinterpret_cast<recity::QueryHeapId>(heap);
 }
 
 }  // namespace rt::d3d12

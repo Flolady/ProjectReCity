@@ -16,7 +16,7 @@
 // The device has no pipelines yet, so the test makes that one pipeline in Vulkan itself and binds the device's set
 // (rt::d3d12::bindless_set). The shader is test/glsl/cs_sample.comp; without glslangValidator at build time the
 // sampling is skipped. No game data.
-// Set LEONIDA_VK_VALIDATION=1 to run under VK_LAYER_KHRONOS_validation.
+// Set RECITY_VK_VALIDATION=1 to run under VK_LAYER_KHRONOS_validation.
 #include "vk_test_device.h"
 #include "../shims/d3d12_com.h"
 #include "../shims/d3d12_xs_device.h"
@@ -80,7 +80,7 @@ std::array<std::uint8_t, 4> texel(UINT x, UINT y) {
     return {std::uint8_t(x * 32), std::uint8_t(y * 32), std::uint8_t(128 + x + 8 * y), 255};
 }
 
-#ifdef LEONIDA_TEST_CS_SAMPLE_SPV
+#ifdef RECITY_TEST_CS_SAMPLE_SPV
 // What cs_sample.comp is pushed: a T#, an S#, and where in the output buffer its 64 texels go.
 struct SampleKeys {
     std::uint32_t tsharp[8];
@@ -94,7 +94,7 @@ struct SampleKeys {
 bool sample_through_set(vktest::Device& d, VkDescriptorSet set0, VkDescriptorSetLayout set0_layout,
                         std::span<const SampleKeys> keys, std::uint8_t* results) {
     const VkDevice dev = d.device;
-    std::ifstream file(LEONIDA_TEST_CS_SAMPLE_SPV, std::ios::binary | std::ios::ate);
+    std::ifstream file(RECITY_TEST_CS_SAMPLE_SPV, std::ios::binary | std::ios::ate);
     if (!file) return false;
     std::vector<std::uint32_t> code(std::size_t(file.tellg()) / 4);
     file.seekg(0);
@@ -462,7 +462,7 @@ int main() {
         EXPECT(sampler_step >= 16);
 
         // What the slots hold says what the view and the sampler are, in the structures the console's shaders read.
-        namespace g = leonida::gfx10;
+        namespace g = recity::gfx10;
         const auto image_at = [&](UINT i, g::Image& image) {
             g::ImageWords words{};
             std::memcpy(words.data(), view_bytes(i), sizeof(words));
@@ -901,7 +901,7 @@ int main() {
         EXPECT(list->Close() == S_OK);
         ID3D12CommandList* lists[] = {list.p};
         queue->ExecuteCommandLists(1, lists);
-        EXPECT(rt::d3d12::last_execute_result(queue.p) == leonida::ReplayResult::success);
+        EXPECT(rt::d3d12::last_execute_result(queue.p) == recity::ReplayResult::success);
         EXPECT(SUCCEEDED(queue->Signal(fence.p, 1)));
         EXPECT(SUCCEEDED(fence->SetEventOnCompletion(1, nullptr)));
 
@@ -910,7 +910,7 @@ int main() {
         const VkDescriptorSet set0 = rt::d3d12::bindless_set(device.p);
         const VkDescriptorSetLayout set0_layout = rt::d3d12::bindless_set_layout(device.p);
         EXPECT(set0 && set0_layout);
-#ifdef LEONIDA_TEST_CS_SAMPLE_SPV
+#ifdef RECITY_TEST_CS_SAMPLE_SPV
         const UINT tables[] = {own, copied, unknown, packed_slot};
         SampleKeys keys[std::size(tables)] = {};
         for (UINT k = 0; k < std::size(tables); ++k) {
@@ -1029,10 +1029,10 @@ int main() {
         EXPECT(SUCCEEDED(allocator->Reset()) && SUCCEEDED(list->Reset(allocator.p, nullptr)));
         EXPECT(list->Close() == S_OK);
         queue->ExecuteCommandLists(1, lists);
-        EXPECT(rt::d3d12::last_execute_result(queue.p) == leonida::ReplayResult::success);
+        EXPECT(rt::d3d12::last_execute_result(queue.p) == recity::ReplayResult::success);
         EXPECT(SUCCEEDED(queue->Signal(fence.p, 2)));
         EXPECT(SUCCEEDED(fence->SetEventOnCompletion(2, nullptr)));
-#ifdef LEONIDA_TEST_CS_SAMPLE_SPV
+#ifdef RECITY_TEST_CS_SAMPLE_SPV
         // The view's bytes are still in the slot, but they find nothing any more: the fallback.
         SampleKeys gone = keys[0];
         gone.first = 0;
@@ -1096,7 +1096,7 @@ int main() {
             list->ResourceBarrier(1, &readable);
             EXPECT(list->Close() == S_OK);
             queue->ExecuteCommandLists(1, lists);
-            EXPECT(rt::d3d12::last_execute_result(queue.p) == leonida::ReplayResult::success);
+            EXPECT(rt::d3d12::last_execute_result(queue.p) == recity::ReplayResult::success);
             ++packed_signal;
             EXPECT(SUCCEEDED(queue->Signal(fence.p, packed_signal)) &&
                    SUCCEEDED(fence->SetEventOnCompletion(packed_signal, nullptr)));
@@ -1105,7 +1105,7 @@ int main() {
             EXPECT(image_at(null_slot, packed_image));
             EXPECT(packed_image.format == g::format_from_vulkan(format.vk) && packed_image.format != 0);
             if (format.dxgi == DXGI_FORMAT_B5G5R5A1_UNORM) EXPECT(packed_image.swizzle == g::channels_bgra);
-#ifdef LEONIDA_TEST_CS_SAMPLE_SPV
+#ifdef RECITY_TEST_CS_SAMPLE_SPV
             SampleKeys packed_keys{};
             std::memcpy(packed_keys.tsharp, view_bytes(null_slot), sizeof(packed_keys.tsharp));
             std::memcpy(packed_keys.ssharp, sampler_bytes, sizeof(packed_keys.ssharp));

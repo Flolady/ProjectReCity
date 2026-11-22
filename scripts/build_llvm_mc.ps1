@@ -8,8 +8,8 @@
 #   powershell -ExecutionPolicy Bypass -File scripts\build_llvm_mc.ps1 -Dest D:\tools\llvm-mc -NoEnv
 param(
     [string]$Version = "21.1.8",
-    [string]$Dest = (Join-Path $env:LOCALAPPDATA "Leonida\llvm-mc"),
-    [string]$Temp = (Join-Path $env:TEMP "leonida-llvm-mc"),
+    [string]$Dest = (Join-Path $env:LOCALAPPDATA "ReCity\llvm-mc"),
+    [string]$Temp = (Join-Path $env:TEMP "recity-llvm-mc"),
     [switch]$NoEnv,   # don't set LLVM_MC for the current user
     [switch]$Keep     # keep the sources and build folder (faster rebuilds)
 )

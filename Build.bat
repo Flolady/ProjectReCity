@@ -1,6 +1,6 @@
 @echo off
 rem Double-click to build. Finds your copy of the game, checks what's installed, and builds into
-rem Documents\Leonida. Extra options pass through, e.g.  Build.bat --out D:\Games\Leonida
+rem Documents\ReCity. Extra options pass through, e.g.  Build.bat --out D:\Games\ReCity
 setlocal
 cd /d "%~dp0"
 set "PY="

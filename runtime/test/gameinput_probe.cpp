@@ -4,7 +4,7 @@
 //
 // Lists the gamepads the shim sees, then prints the live gamepad reading of each for N seconds (default 10). With
 // --rumble it first plays, on every pad: the low-frequency motor, the high-frequency motor, the left and the right
-// impulse trigger, one second each. On a DualSense the trigger steps run in the LEONIDA_DS_TRIGGERS mode (rumble by
+// impulse trigger, one second each. On a DualSense the trigger steps run in the RECITY_DS_TRIGGERS mode (rumble by
 // default; set it to resistance to feel that one). Everything goes through GameInputCreate from the shim registry,
 // as a title would call it. No game data.
 #include <windows.h>

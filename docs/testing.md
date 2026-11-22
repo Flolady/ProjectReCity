@@ -2,13 +2,13 @@
 
 The GPU tests are small hand-written RDNA2 programs in `runtime/test/shaders`. They are translated to SPIR-V and run
 on your GPU, and the results are compared with what the RDNA2 hardware gives. They need no game files, and every
-result helps: post it in [#166](https://github.com/ItsNotRexed/Leonida/issues/166), one comment per GPU and driver.
+result helps: post it in [the GPU results issue](https://github.com/pixl27/ProjectReCity/issues/2), one comment per GPU and driver.
 If your GPU is already covered there, testing an open pull request from the review queue in the [coordination
 issue][claims] helps more.
 
 This page collects the setup steps and the problems testers have run into so far.
 
-[claims]: https://github.com/ItsNotRexed/Leonida/issues?q=is%3Aissue%20is%3Aopen%20in%3Atitle%20%22Coordinating%20who%20works%20on%20what%22
+[claims]: https://github.com/pixl27/ProjectReCity/issues/1
 
 ## What you need
 
@@ -33,7 +33,7 @@ This page collects the setup steps and the problems testers have run into so far
   - Linux: CMake 3.24+, GCC or Clang, and the Vulkan headers and loader. The headers should be recent enough
     for `VK_KHR_maintenance8`; older ones still build, but skip what needs it.
   - macOS: `brew install llvm molten-vk vulkan-headers vulkan-loader spirv-tools vulkan-tools`. The test programs
-    load MoltenVK directly; set `LEONIDA_VULKAN_LOADER` to use the Vulkan loader instead.
+    load MoltenVK directly; set `RECITY_VULKAN_LOADER` to use the Vulkan loader instead.
 
 ## Build the test programs
 
@@ -77,7 +77,7 @@ python -I runtime/test/shaders/check.py <out dir> <folder with the test programs
 The game's shaders are mostly wave64. A GPU that can't run 64-wide compute subgroups skips the wave64 tests
 (`cs_wavemask`, `cs_wave64_ballot`, `cs_wm_*`, `cs_w64x_*`, `ms_w64x_ballot`); that's expected, not a failure.
 
-To test the wave64 emulation that makes them exact on these GPUs, set `LEONIDA_W64_EMULATE=1`, **for both
+To test the wave64 emulation that makes them exact on these GPUs, set `RECITY_W64_EMULATE=1`, **for both
 `build.py` and `check.py`**: `build.py` translates with emulation only when it's set. If you set it only for
 `check.py`, the shaders are checked against the emulated expectations without being emulated, and every wave64 test
 fails.
@@ -91,7 +91,7 @@ for every pull request (`.github/workflows/runtime.yml`), and you can do the sam
 sudo apt-get install -y libvulkan-dev mesa-vulkan-drivers vulkan-tools spirv-tools llvm-18
 cmake -S runtime -B runtime/build/linux && cmake --build runtime/build/linux --parallel
 python -I scripts/run_gpu_tests.py --build runtime/build/linux --llvm-mc /usr/lib/llvm-18/bin/llvm-mc
-LEONIDA_W64_EMULATE=1 python -I scripts/run_gpu_tests.py --build runtime/build/linux \
+RECITY_W64_EMULATE=1 python -I scripts/run_gpu_tests.py --build runtime/build/linux \
     --llvm-mc /usr/lib/llvm-18/bin/llvm-mc --filter cs_
 ```
 
@@ -100,9 +100,9 @@ skips 2. The skips are expected: llvmpipe has 8-wide subgroups (so every wave64 
 the 32-lane tests `ps_bitmask_perm`, `cs_wqm_w32` and `cs_w32_lane_wrap` skip in both runs), no
 `VK_KHR_fragment_shader_barycentric` (`ps_bary`, `ps_uniform_branch`, `ps_scc_mask32`) and no
 `VK_KHR_maintenance8` (`ps_texoff`). With
-`LEONIDA_W64_EMULATE=1` the mesh tests abort inside llvmpipe's compiler ("LLVM ERROR: Cannot emit physreg copy
+`RECITY_W64_EMULATE=1` the mesh tests abort inside llvmpipe's compiler ("LLVM ERROR: Cannot emit physreg copy
 instruction"), which is why the second run is limited to compute. llvmpipe is not a substitute for a result from a
-real GPU in [#166](https://github.com/ItsNotRexed/Leonida/issues/166): it catches regressions, not hardware
+real GPU in [the GPU results issue](https://github.com/pixl27/ProjectReCity/issues/2): it catches regressions, not hardware
 differences.
 
 ## Choosing the GPU
@@ -128,7 +128,7 @@ With more than one GPU, pick one through the Vulkan loader, for example
 
 ## Posting your result
 
-Use the template at the top of [#166](https://github.com/ItsNotRexed/Leonida/issues/166): GPU, driver, subgroup
+Use the template at the top of [the GPU results issue](https://github.com/pixl27/ProjectReCity/issues/2): GPU, driver, subgroup
 range, OS, the commit you built, the tool versions and the counts each script printed. Post counts and pass/fail
 lines only, never shaders or logs from the game. A failure that isn't in the table above gets its own issue, linked
 from your entry.

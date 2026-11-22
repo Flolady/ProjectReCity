@@ -19,7 +19,7 @@ struct Table {
 
 void* find(const std::string& dll_lower, const std::string& name);
 
-// What a call to an import that has no binding does. Chosen by the environment variable LEONIDA_UNIMPLEMENTED
+// What a call to an import that has no binding does. Chosen by the environment variable RECITY_UNIMPLEMENTED
 // (read once, on the first call):
 //   log   (default)  print the name once and return 0, in rax and xmm0
 //   fail             as log, but return E_NOTIMPL for imports classified as HRESULT-returning (classify_import)

@@ -69,7 +69,7 @@ jobs:
         run: >-
           cmake -S runtime -B runtime/build -G Ninja
           -DCMAKE_BUILD_TYPE=RelWithDebInfo
-          -DLEONIDA_D3D12_SHIM_TESTS=ON
+          -DRECITY_D3D12_SHIM_TESTS=ON
           -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
           -DCMAKE_POLICY_DEFAULT_CMP0141=NEW
           -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded
@@ -206,5 +206,5 @@ jobs:
         # llvmpipe has 8-wide subgroups, so the wave64 compute tests only run emulated. The emulated mesh tests are
         # left out: llvmpipe's LLVM backend aborts compiling them ("Cannot emit physreg copy instruction").
         env:
-          LEONIDA_W64_EMULATE: "1"
+          RECITY_W64_EMULATE: "1"
         run: python3 -I scripts/run_gpu_tests.py --build runtime/build --llvm-mc /usr/lib/llvm-18/bin/llvm-mc --work "$RUNNER_TEMP/gpu-w64" --filter cs_

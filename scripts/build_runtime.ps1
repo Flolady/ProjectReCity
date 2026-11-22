@@ -20,7 +20,7 @@ $cmakeDir = Join-Path $vs "Common7\IDE\CommonExtensions\Microsoft\CMake"
 $cmake = Join-Path $cmakeDir "CMake\bin\cmake.exe"
 $ninja = Join-Path $cmakeDir "Ninja\ninja.exe"
 $cfg = if ($Debug) { "Debug" } else { "RelWithDebInfo" }
-$sdl = if ($FetchSdl3) { "-DLEONIDA_SDL3_FETCH=ON" } else { "" }
+$sdl = if ($FetchSdl3) { "-DRECITY_SDL3_FETCH=ON" } else { "" }
 
 if ((Test-Path $cmake) -and (Test-Path $ninja)) {
     $body = @"

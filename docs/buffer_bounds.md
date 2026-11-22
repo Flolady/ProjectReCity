@@ -25,8 +25,8 @@ makes it pick the bounds check by mode, and the contract row is "Buffer bounds c
 - In-range accesses at a dword-aligned address read and wrote the expected dword (0 exceptions). An address that is
   not a multiple of 4 (stride 18 with `index > 0`) is rounded by the hardware; where such an access lands was not
   part of this measurement.
-- @AlxcBTW measured RDNA3.5 (Radeon 880M, gfx1150) through the HIP runtime and found it matches the GFX11 column
-  ([finding](https://github.com/ItsNotRexed/Leonida/issues/374#issuecomment-7072793165)). The RDNA2 result here
+- @AlxcBTW measured RDNA3.5 (Radeon 880M, gfx1150) through the HIP runtime and found it matches the GFX11 column.
+  The RDNA2 result here
   agrees with it, plus the `soffset` rule.
 
 **Open:** the console target is gfx1013 (GFX10.1); gfx1036 is GFX10.3. Mesa uses one GFX10 column for both, and

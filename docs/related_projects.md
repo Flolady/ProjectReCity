@@ -1,6 +1,6 @@
 # Related projects and prior art
 
-Leonida is **GPL-3.0-or-later**. Some useful reverse-engineering work lives under other licences, and some of it
+ReCity is **GPL-3.0-or-later**. Some useful reverse-engineering work lives under other licences, and some of it
 cannot be mixed with this repository. This page records what we may learn from each project and where the line is.
 
 The rule is the same for every entry: **facts are fine; code is not.** A format layout, an ABI observation or a
@@ -15,7 +15,7 @@ decoder. Its format observations are relevant to the archive, texture and audio 
 
 **Licence:** the "PercyStar Non-Commercial Attribution & Copyleft License (v1.2)". It is source-available, says
 "All rights reserved", and adds non-commercial, attribution, naming and share-alike conditions. It is not
-GPL-compatible, so **no PercyStar code, comments or tables may be copied into Leonida**.
+GPL-compatible, so **no PercyStar code, comments or tables may be copied into ReCity**.
 
 **What we use it for:** reading about format facts, then implementing them independently. If a fact is useful,
 record the observation in our own words, cite the project and verify it against the package or a public
@@ -47,7 +47,7 @@ TTPF pools and AWC audio). It is a `third_party` **submodule**, not code copied 
 
 **Licence:** the repository has **no licence file** (GitHub reports no licence), so all rights are reserved by
 default. A submodule is an external dependency; it is not a grant to copy its code. Do not paste its functions,
-tables or comments into Leonida. If a format fact learned from it is useful, verify it against the package and
+tables or comments into ReCity. If a format fact learned from it is useful, verify it against the package and
 write our own implementation. The model-recovery gap measured in [models.md](models.md) is in that submodule; the
 fix should go upstream, not into a copy.
 
@@ -66,9 +66,9 @@ say in the pull request which file a borrowed fact came from. Do not copy a whol
 licence allows it.
 
 **What we use it for:** the measured console runtime surface (see `docs/d3d12_xs_surface.md` when that study
-lands), the IID/extension tables, and the call-sequence observations that Leonida's own
+lands), the IID/extension tables, and the call-sequence observations that ReCity's own
 [d3d12_vulkan.md §7](d3d12_vulkan.md#7-prior-art-and-measured-xbox-abi) still lists as unknown. SCARAB forwards to
-D3D12; Leonida translates to Vulkan. The ABI facts carry over, the forwarding architecture does not.
+D3D12; ReCity translates to Vulkan. The ABI facts carry over, the forwarding architecture does not.
 
 ## microsoft/libHttpClient
 

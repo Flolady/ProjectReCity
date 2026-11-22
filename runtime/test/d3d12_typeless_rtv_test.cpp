@@ -1,6 +1,6 @@
 
 // Compare typed RTVs on one typeless RGBA8 resource against Windows D3D12/WARP.
-// No game data or shaders. Run explicitly (needs Vulkan hardware); LEONIDA_VK_VALIDATION=1 checks Vulkan usage.
+// No game data or shaders. Run explicitly (needs Vulkan hardware); RECITY_VK_VALIDATION=1 checks Vulkan usage.
 #include "vk_test_device.h"
 #include "../shims/d3d12_com.h"
 #include <dxgi1_4.h>

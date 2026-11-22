@@ -1,7 +1,7 @@
 
 // Compare render-target and depth-stencil clears against native Windows D3D12/WARP, through D3D12 clear/copy/Map on
 // both sides. Covers UNORM/SNORM/FLOAT/UINT/SINT render targets and depth/stencil, full and rectangle clears.
-// No game data or shaders. Run explicitly (needs Vulkan hardware); LEONIDA_VK_VALIDATION=1 checks Vulkan usage.
+// No game data or shaders. Run explicitly (needs Vulkan hardware); RECITY_VK_VALIDATION=1 checks Vulkan usage.
 #include "vk_test_device.h"
 #include "../shims/d3d12_com.h"
 #include <dxgi1_4.h>

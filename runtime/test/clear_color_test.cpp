@@ -20,16 +20,16 @@ VKAPI_ATTR void VKAPI_CALL end(VkCommandBuffer) {}
 VKAPI_ATTR void VKAPI_CALL attachments(VkCommandBuffer, std::uint32_t n, const VkClearAttachment* a,
     std::uint32_t, const VkClearRect*) { if (n == 1) { captured = a[0].clearValue.color; ++calls; } }
 
-bool replay_color(VkFormat format, const leonida::ClearColor& color, bool rectangle) {
-    leonida::CommandList list;
-    const leonida::Rect rect{1, 1, 3, 3};
+bool replay_color(VkFormat format, const recity::ClearColor& color, bool rectangle) {
+    recity::CommandList list;
+    const recity::Rect rect{1, 1, 3, 3};
     if (!list.clear_render_target({1, 0, 0, 1}, color,
-        rectangle ? std::span<const leonida::Rect>(&rect, 1) : std::span<const leonida::Rect>{}) || !list.close()) return false;
-    leonida::ResourceBinding binding{};
+        rectangle ? std::span<const recity::Rect>(&rect, 1) : std::span<const recity::Rect>{}) || !list.close()) return false;
+    recity::ResourceBinding binding{};
     binding.image = reinterpret_cast<VkImage>(std::uintptr_t{1});
     binding.format = format;
     binding.width = binding.height = 4;
-    leonida::ReplayFunctions vk{};
+    recity::ReplayFunctions vk{};
     vk.pipeline_barrier = barrier;
     vk.clear_color_image = clear;
     vk.begin_rendering = begin;
@@ -37,7 +37,7 @@ bool replay_color(VkFormat format, const leonida::ClearColor& color, bool rectan
     vk.clear_attachments = attachments;
     vk.image_view = [](const auto&, const auto&) { return reinterpret_cast<VkImageView>(std::uintptr_t{1}); };
     calls = 0;
-    return leonida::replay(list, VK_NULL_HANDLE, [&](auto) { return &binding; }, vk) == leonida::ReplayResult::success && calls == 1;
+    return recity::replay(list, VK_NULL_HANDLE, [&](auto) { return &binding; }, vk) == recity::ReplayResult::success && calls == 1;
 }
 
 // Integer RTV format with its component range; A2B10G10R10 has a 2-bit alpha.
@@ -53,7 +53,7 @@ std::uint32_t expected_bits(float input, double low, double high, bool is_signed
 
 int main() {
     const float nan = std::numeric_limits<float>::quiet_NaN(), inf = std::numeric_limits<float>::infinity();
-    const leonida::ClearColor cases[] = {
+    const recity::ClearColor cases[] = {
         {1, 2, 3, 4},
         {1.5f, 2.5f, 3.5f, 4.5f},
         {-1, -0.0f, 254.5f, 255.5f},

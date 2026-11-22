@@ -4,12 +4,12 @@
 // It records what the constructor does: how much of the object it writes, which device slots it calls, what it
 // prints through OutputDebugString, and whether it gives up through TerminateProcess.
 //
-//   LEONIDA_GAME_DIR=<package root>   (contains XboxBvhBuilder.dll)
-//   LEONIDA_BVH_FLAG=1                (optional: pass true as the constructor's bool argument)
-//   LEONIDA_BVH_WARP=1                (optional: use the WARP adapter)
-//   LEONIDA_BVH_DEVICE=vulkan         (optional: the Vulkan-backed ID3D12Device from #119 instead of a PC device)
+//   RECITY_GAME_DIR=<package root>   (contains XboxBvhBuilder.dll)
+//   RECITY_BVH_FLAG=1                (optional: pass true as the constructor's bool argument)
+//   RECITY_BVH_WARP=1                (optional: use the WARP adapter)
+//   RECITY_BVH_DEVICE=vulkan         (optional: the Vulkan-backed ID3D12Device from #119 instead of a PC device)
 //
-// Without LEONIDA_GAME_DIR it prints "SKIP (no package)" and exits 0. Nothing from the DLL is written to disk.
+// Without RECITY_GAME_DIR it prints "SKIP (no package)" and exits 0. Nothing from the DLL is written to disk.
 //
 // The exports are C++ members (demangled): XboxBvhBuilder::XboxBvhBuilder(ID3D12Device11*, bool) and ~XboxBvhBuilder().
 // sizeof(XboxBvhBuilder) is not exported, so the object lives in a large buffer filled with a sentinel, and the
@@ -31,7 +31,7 @@
 #include "../shims/d3d12_xs_device.h"
 #include "../shims/shims.h"
 #include "../src/pe_loader.h"
-#ifdef LEONIDA_VULKAN_DEVICE
+#ifdef RECITY_VULKAN_DEVICE
 #include "../shims/d3d12_com.h"
 #endif
 
@@ -331,7 +331,7 @@ auto module_tls_index(const M& m, long) -> decltype(m.tls_slot, uint32_t()) { re
 
 int main() {
     std::setvbuf(stdout, nullptr, _IONBF, 0);  // keep every line if the DLL takes the process down
-    const std::string game_dir_arg = env("LEONIDA_GAME_DIR");
+    const std::string game_dir_arg = env("RECITY_GAME_DIR");
     if (game_dir_arg.empty()) {
         std::printf("SKIP (no package)\n");
         return 0;
@@ -340,7 +340,7 @@ int main() {
     const std::filesystem::path dll = game_dir / "XboxBvhBuilder.dll";
     std::error_code ec;
     if (!std::filesystem::is_regular_file(dll, ec)) {
-        std::printf("FAIL LEONIDA_GAME_DIR does not contain XboxBvhBuilder.dll\n");
+        std::printf("FAIL RECITY_GAME_DIR does not contain XboxBvhBuilder.dll\n");
         return 1;
     }
 
@@ -382,19 +382,19 @@ int main() {
         std::printf("TLS: %s index %u\n", tls != ~0u ? "loader" : "no", tls);
 
         ID3D12Device* pc = nullptr;
-        const bool on_vulkan = env("LEONIDA_BVH_DEVICE") == "vulkan";
+        const bool on_vulkan = env("RECITY_BVH_DEVICE") == "vulkan";
         if (on_vulkan) {
-#ifdef LEONIDA_VULKAN_DEVICE
+#ifdef RECITY_VULKAN_DEVICE
             // The Vulkan-backed ID3D12Device (#119) instead of the host's D3D12 device, behind the same proxy.
             const HRESULT vhr = rt::d3d12::create_vulkan_device_standalone(__uuidof(ID3D12Device), reinterpret_cast<void**>(&pc));
             check(SUCCEEDED(vhr) && pc, "Vulkan-backed D3D12 device created (" + hex(static_cast<uint32_t>(vhr)) + ")");
 #else
-            check(false, "LEONIDA_BVH_DEVICE=vulkan needs a build with the Vulkan SDK (gta6rt_d3d12_com)");
+            check(false, "RECITY_BVH_DEVICE=vulkan needs a build with the Vulkan SDK (gta6rt_d3d12_com)");
 #endif
         } else {
             const bool debug_layer = enable_debug_layer();
             note(std::string("D3D12 debug layer ") + (debug_layer ? "enabled" : "not available (Graphics Tools not installed)"));
-            pc = create_pc_device(env("LEONIDA_BVH_WARP") == "1");
+            pc = create_pc_device(env("RECITY_BVH_WARP") == "1");
             check(pc != nullptr, "PC D3D12 device created");
         }
         if (!pc) return 1;
@@ -404,7 +404,7 @@ int main() {
             ID3D12Device11* host11 = nullptr;
             if (FAILED(pc->QueryInterface(IID_PPV_ARGS(&host11))) || !host11) {
                 std::printf("SKIP (the host D3D12 runtime has no ID3D12Device11, e.g. Windows 10 without the Agility "
-                            "SDK; LEONIDA_BVH_DEVICE=vulkan runs on the Vulkan-backed device)\n");
+                            "SDK; RECITY_BVH_DEVICE=vulkan runs on the Vulkan-backed device)\n");
                 pc->Release();
                 return g_failures ? 1 : 0;
             }
@@ -415,14 +415,14 @@ int main() {
         const HRESULT hr = rt::d3d12_xs::create_device_proxy(pc, __uuidof(ID3D12Device11), &proxy);
         check(SUCCEEDED(hr) && proxy, "Xbox-ABI device proxy created as ID3D12Device11 (" + hex(static_cast<uint32_t>(hr)) + ")");
         if (!proxy) return 1;
-#ifdef LEONIDA_VULKAN_DEVICE
+#ifdef RECITY_VULKAN_DEVICE
         if (on_vulkan) rt::d3d12::set_device_outer(pc, static_cast<IUnknown*>(proxy));
 #endif
         rt::d3d12_xs::reset_device_proxy_stats();
-        if (env("LEONIDA_BVH_RECORD62") == "1")
+        if (env("RECITY_BVH_RECORD62") == "1")
             check(hook_slot62(proxy, rt::d3d12_xs::device_proxy_slot_count(proxy)), "slot 62 recorder installed");
 
-        const bool flag = env("LEONIDA_BVH_FLAG") == "1";
+        const bool flag = env("RECITY_BVH_FLAG") == "1";
         std::vector<uint8_t> object(kObjectBuffer, kSentinel);
         const ULONGLONG t0 = GetTickCount64();
         Call c = guarded_ctor(ctor, object.data(), proxy, flag);

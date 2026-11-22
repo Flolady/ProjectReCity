@@ -9,7 +9,7 @@ Each line is one shader: ok, or what came back instead. The wave32 test ps_bitma
 0-31, since a GPU with 64-wide subgroups puts half the pixels in lanes it wasn't written for.
 The two whole-wave mask checks are skipped when the device cannot provide a full 64-wide compute subgroup.
 The cs_w64x_* / ms_w64x_* cross-half tests (lanes 32-63 against lanes 0-31, see their .asm headers) are skipped there
-too. With LEONIDA_W64_EMULATE=1 they run without that requirement, on a device whose subgroups are narrower (NVIDIA),
+too. With RECITY_W64_EMULATE=1 they run without that requirement, on a device whose subgroups are narrower (NVIDIA),
 to check a translator that emulates wave64 on them. scripts/run_gpu_tests.py builds the mesh fixtures and
 fs_passthru.spv; here the mesh checks run when those files are in <out dir>/spirv.
 ps_tex is skipped when the device lacks a feature the bindless set or the shader needs.
@@ -122,7 +122,7 @@ CVT_F32_SAT_CASES = (
     (0xCF000001, 0, 0x80000000), (0x7F800000, 0xFFFFFFFF, 0x7FFFFFFF), (0xFF800000, 0, 0x80000000),
     (0x7F800001, 0, 0), (0xFFC00000, 0, 0))
 # Cross-half wave64 tests (x = cross-half): exact results need 64 lanes, or an emulation of them on narrower subgroups.
-W64_EMULATED = os.environ.get("LEONIDA_W64_EMULATE") == "1"
+W64_EMULATED = os.environ.get("RECITY_W64_EMULATE") == "1"
 W64X_DUMPS = [("cs_w64x_readlane", [121, 121, 16, 97, 16, 100, 100, 121]),
               ("cs_w64x_writelane", [4660, 77, 99, 2748, 0, 0, 4660, 99]),
               ("cs_w64x_readfirstlane", [140, 140, 163, 132, 100, 105, 133, 48]),
@@ -200,28 +200,28 @@ def start_failure(exe, err):
 
 
 # A test program that hangs (a driver deadlock, e.g. a barrier not every invocation reaches) must not stall the whole
-# suite: each run gets a time limit, is killed when it runs out, and counts as a failure. LEONIDA_GPU_TEST_TIMEOUT
+# suite: each run gets a time limit, is killed when it runs out, and counts as a failure. RECITY_GPU_TEST_TIMEOUT
 # sets the limit in seconds; 0 turns it off.
 DEFAULT_GPU_TEST_TIMEOUT = 120.0
 
 
 def gpu_test_timeout():
-    """Seconds one GPU test program may run (LEONIDA_GPU_TEST_TIMEOUT), or None for no limit."""
-    text = (os.environ.get("LEONIDA_GPU_TEST_TIMEOUT") or "").strip()
+    """Seconds one GPU test program may run (RECITY_GPU_TEST_TIMEOUT), or None for no limit."""
+    text = (os.environ.get("RECITY_GPU_TEST_TIMEOUT") or "").strip()
     if not text:
         return DEFAULT_GPU_TEST_TIMEOUT
     try:
         limit = float(text)
     except ValueError:
-        sys.exit(f"LEONIDA_GPU_TEST_TIMEOUT must be a number of seconds (0 = no limit), not {text!r}")
+        sys.exit(f"RECITY_GPU_TEST_TIMEOUT must be a number of seconds (0 = no limit), not {text!r}")
     if math.isnan(limit):
-        sys.exit("LEONIDA_GPU_TEST_TIMEOUT must be a number of seconds (0 = no limit), not nan")
+        sys.exit("RECITY_GPU_TEST_TIMEOUT must be a number of seconds (0 = no limit), not nan")
     return None if limit <= 0 else limit
 
 
 def timed_out(name, limit):
     return (f"timed out after {limit:g} s: {os.path.basename(str(name))} was killed (a GPU hang?); "
-            "LEONIDA_GPU_TEST_TIMEOUT sets the limit")
+            "RECITY_GPU_TEST_TIMEOUT sets the limit")
 
 
 def run(*cmd, env=None):
@@ -247,7 +247,7 @@ def failure(code, output, lines):
 def fmt_1010102_test(tools, spirv, env=None):
     """Check both packed stores and the untouched tail. The console dump stops at word 7."""
     want = FMT_1010102_WORDS + [0xEEEEEEEE] * 48
-    with tempfile.TemporaryDirectory(prefix="leonida-fmt-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="recity-fmt-") as tmp:
         dump = Path(tmp) / "out.bin"
         # VKC_OUT_WORDS sets a minimum. Pin this dispatch to a single group's 64 words.
         child = dict(os.environ if env is None else env, VKC_DUMP=str(dump), VKC_OUT_WORDS="64")
@@ -304,7 +304,7 @@ def mesh_v5_test(tools, spirv, raw):
 
 def partial_wave_test(tools, spirv, name, expected_words):
     """A group smaller than a wave: run with subgroup size 64 requested (no full subgroups); None if the device
-    has no 64-wide subgroup. With LEONIDA_W64_EMULATE=1 it asks for 32 instead, the width the emulation is for, so
+    has no 64-wide subgroup. With RECITY_W64_EMULATE=1 it asks for 32 instead, the width the emulation is for, so
     a device that defaults to 64 (AMD) runs the emulated path at 32 too (#166)."""
     shader = os.path.join(spirv, name + ".spv")
     if not os.path.isfile(shader):
@@ -390,7 +390,7 @@ def mesh_w64x_test(tools, spirv, name):
     env = dict(os.environ, VKH_MESH="1")
     if not W64_EMULATED:
         env["VKH_SUBGROUP_SIZE"] = "64"
-    with tempfile.TemporaryDirectory(prefix="leonida-mesh-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="recity-mesh-") as tmp:
         raw = Path(tmp) / "pixels.raw"
         harness = os.path.join(tools, "vk_harness" + EXE)
         limit = gpu_test_timeout()
@@ -450,7 +450,7 @@ def texture_gradient_a16_test(tools: str, spirv: str, name: str = "ps_texture_gr
     vs = os.path.join(spirv, "vs_ids.spv")
     fs = os.path.join(spirv, name + ".spv")
     two_mip = name == "ps_texture_grad_cl_a16"
-    with tempfile.TemporaryDirectory(prefix="leonida-texture-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="recity-texture-") as tmp:
         raw = Path(tmp) / "pixels.raw"
         code, out = run(os.path.join(tools, "vk_texture_test" + EXE), vs, fs, raw,
                         "0", "92", "c00000", "14500000", "0", *(["--two-mip"] if two_mip else []))
@@ -485,7 +485,7 @@ def pixels(tools, spirv, name, fmt):
     env = dict(os.environ, VKH_SUBGROUP_SIZE=str(sg)) if sg else None
     if name in PIXEL_ENV:
         env = dict(env or os.environ, **PIXEL_ENV[name])
-    with tempfile.TemporaryDirectory(prefix="leonida-pixels-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="recity-pixels-") as tmp:
         raw = Path(tmp) / "pixels.raw"
         code, out = run(os.path.join(tools, "vk_harness" + EXE), os.path.join(spirv, "vs_ids.spv"),
                         os.path.join(spirv, name + ".spv"), raw, env=env)
@@ -504,7 +504,7 @@ def gather_wrap_test(tools, spirv):
     shader = os.path.join(spirv, "ps_gather_wrap.spv")
     if not os.path.isfile(shader):
         return "missing ps_gather_wrap.spv"
-    with tempfile.TemporaryDirectory(prefix="leonida-gather-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="recity-gather-") as tmp:
         raw = Path(tmp) / "gather.raw"
         code, out = run(os.path.join(tools, "vk_texture_test" + EXE), os.path.join(spirv, "vs_ids.spv"), shader, raw,
                         "0", "92", "c00000", "14500000", "0")
@@ -544,7 +544,7 @@ def texoff_problem(data, output):
 
 def texoff_test(tools, spirv, name):
     """ps_texoff on vk_texture_test (it binds the texture, sampler and descriptor table); vs_ids supplies attr0."""
-    with tempfile.TemporaryDirectory(prefix="leonida-pixels-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="recity-pixels-") as tmp:
         raw = Path(tmp) / "pixels.raw"
         code, out = run(os.path.join(tools, "vk_texture_test" + EXE), os.path.join(spirv, "vs_ids.spv"),
                         os.path.join(spirv, name + ".spv"), raw, *TEXOFF_ARGS,
@@ -580,7 +580,7 @@ def texture_mip_test(tools: str, spirv: str) -> str:
         return f"missing {tool}"
     shaders = Path(spirv)
     vertex = shaders / "vs_ids.spv"
-    with tempfile.TemporaryDirectory(prefix="leonida-mip-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="recity-mip-") as tmp:
         for mip, name in enumerate((TEXTURE_MIP_TEST, "ps_texture_sample")):
             fragment = shaders / (name + ".spv")
             for shader in (vertex, fragment):
@@ -656,7 +656,7 @@ def pixel_test(tools, spirv, name):
 
 
 def clip_test(tools, spirv, name):
-    with tempfile.TemporaryDirectory(prefix="leonida-clip-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="recity-clip-") as tmp:
         raw = Path(tmp) / "pixels.raw"
         for clip_x, clip_y in ((False, False), (True, False), (False, True), (True, True)):
             code, output = run(os.path.join(tools, "vk_harness" + EXE), os.path.join(spirv, name + ".spv"),
@@ -708,14 +708,14 @@ def main():
     results.append(("cs_user_sgprs", compute_test(tools, spirv, "cs_user_sgprs", "1", "dump",
                                                   expected_words=USER_SGPRS_WORDS, env=USER_SGPRS_ENV)))
     results.append(("cs_cvt_f32_sat", cvt_f32_sat_test(tools, spirv)))
-    for name, want in W64X_DUMPS:   # without --require-wave64 when LEONIDA_W64_EMULATE=1
+    for name, want in W64X_DUMPS:   # without --require-wave64 when RECITY_W64_EMULATE=1
         results.append((name, compute_test(tools, spirv, name, "1", "dump", require_wave64=not W64_EMULATED,
                                            expected_words=want)))
     for name, want in W64X_PARTIAL:
         results.append((name, partial_wave_test(tools, spirv, name, want)))
     results.append(("ms_w64x_ballot", mesh_w64x_test(tools, spirv, "ms_w64x_ballot")))
     results.append(("ms_wave_info_s3", mesh_w64x_test(tools, spirv, "ms_wave_info_s3")))
-    with tempfile.TemporaryDirectory(prefix="leonida-mesh-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="recity-mesh-") as tmp:
         results.append(("ms_v5_workgroup", mesh_v5_test(tools, spirv, Path(tmp) / "groups.raw")))
     for name, args in (("cs_imgstore", []), ("cs_imgload", ["load"])):
         code, out = run(os.path.join(tools, "vk_store_test" + EXE), os.path.join(spirv, name + ".spv"), *args)

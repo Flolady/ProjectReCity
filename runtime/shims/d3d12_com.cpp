@@ -39,16 +39,16 @@ void note_once(const char* what) {
     if (seen.insert(what).second) std::fprintf(stderr, "[rt] d3d12: %s\n", what);
 }
 
-const char* name(leonida::ReplayResult result) {
+const char* name(recity::ReplayResult result) {
     switch (result) {
-    case leonida::ReplayResult::success: return "success";
-    case leonida::ReplayResult::list_open: return "a list is not closed";
-    case leonida::ReplayResult::unresolved_resource: return "unknown resource";
-    case leonida::ReplayResult::invalid_subresource: return "invalid subresource";
-    case leonida::ReplayResult::invalid_clear: return "invalid clear";
-    case leonida::ReplayResult::invalid_copy: return "invalid copy or resolve";
-    case leonida::ReplayResult::invalid_query: return "invalid query";
-    case leonida::ReplayResult::unsupported: return "unsupported";
+    case recity::ReplayResult::success: return "success";
+    case recity::ReplayResult::list_open: return "a list is not closed";
+    case recity::ReplayResult::unresolved_resource: return "unknown resource";
+    case recity::ReplayResult::invalid_subresource: return "invalid subresource";
+    case recity::ReplayResult::invalid_clear: return "invalid clear";
+    case recity::ReplayResult::invalid_copy: return "invalid copy or resolve";
+    case recity::ReplayResult::invalid_query: return "invalid query";
+    case recity::ReplayResult::unsupported: return "unsupported";
     }
     return "?";
 }
@@ -81,7 +81,7 @@ public:
     static constexpr GUID kTag{0x2f8a7c33, 0x91d4, 0x4b6e, {0x8e, 0x05, 0x6d, 0x3f, 0x1a, 0x9b, 0x2c, 0x47}};
     explicit GraphicsCommandList(D3D12_COMMAND_LIST_TYPE type) : type_(type) {}
 
-    const leonida::CommandList& commands() const { return list_; }
+    const recity::CommandList& commands() const { return list_; }
     UINT front_stencil_ref() const { return front_stencil_ref_; }
     UINT back_stencil_ref() const { return back_stencil_ref_; }
 
@@ -163,20 +163,20 @@ public:
                 switch (group[g].Type) {
                 case D3D12_BARRIER_TYPE_GLOBAL: {
                     const auto& b = group[g].pGlobalBarriers[i];
-                    check(list_.barrier(leonida::GlobalBarrier{u(b.SyncBefore), u(b.SyncAfter), u(b.AccessBefore),
+                    check(list_.barrier(recity::GlobalBarrier{u(b.SyncBefore), u(b.SyncAfter), u(b.AccessBefore),
                                                                u(b.AccessAfter)}));
                     break;
                 }
                 case D3D12_BARRIER_TYPE_BUFFER: {
                     const auto& b = group[g].pBufferBarriers[i];
-                    check(list_.barrier(leonida::BufferBarrier{u(b.SyncBefore), u(b.SyncAfter), u(b.AccessBefore),
+                    check(list_.barrier(recity::BufferBarrier{u(b.SyncBefore), u(b.SyncAfter), u(b.AccessBefore),
                                                                u(b.AccessAfter), resource_id(b.pResource)}));
                     break;
                 }
                 case D3D12_BARRIER_TYPE_TEXTURE: {
                     const auto& b = group[g].pTextureBarriers[i];
                     const auto& r = b.Subresources;
-                    check(list_.barrier(leonida::TextureBarrier{
+                    check(list_.barrier(recity::TextureBarrier{
                         u(b.SyncBefore), u(b.SyncAfter), u(b.AccessBefore), u(b.AccessAfter), u(b.LayoutBefore),
                         u(b.LayoutAfter), resource_id(b.pResource),
                         {r.IndexOrFirstMipLevel, r.NumMipLevels, r.FirstArraySlice, r.NumArraySlices, r.FirstPlane,
@@ -203,7 +203,7 @@ public:
         d3d12_trace::record("ID3D12GraphicsCommandList::CopyTextureRegion");
         if (type_ == D3D12_COMMAND_LIST_TYPE_BUNDLE) return check(false);
         if (!dst || !src) return check(false);
-        leonida::CopyTexture copy{location(*dst), x, y, z, location(*src), box != nullptr, {}};
+        recity::CopyTexture copy{location(*dst), x, y, z, location(*src), box != nullptr, {}};
         if (box) copy.box = {box->left, box->top, box->front, box->right, box->bottom, box->back};
         check(list_.copy_texture(copy));
     }
@@ -229,8 +229,8 @@ public:
         if (type_ != D3D12_COMMAND_LIST_TYPE_DIRECT || mode != D3D12_RESOLVE_MODE_AVERAGE ||
             !color_resolve_format_matches(format, dst, src))
             return check(false);
-        leonida::ResolveRegion region{x, y, std::nullopt};
-        if (rect) region.src_rect = leonida::Rect{rect->left, rect->top, rect->right, rect->bottom};
+        recity::ResolveRegion region{x, y, std::nullopt};
+        if (rect) region.src_rect = recity::Rect{rect->left, rect->top, rect->right, rect->bottom};
         check(list_.resolve_subresource({resource_id(dst), dst_subresource, resource_id(src), src_subresource, region}));
     }
 
@@ -246,7 +246,7 @@ public:
         d3d12_trace::record("ID3D12GraphicsCommandList::ClearRenderTargetView");
         if (type_ == D3D12_COMMAND_LIST_TYPE_BUNDLE) return check(false);
         if (!view.ptr || !color) return check(false);
-        check(list_.clear_render_target(*reinterpret_cast<const leonida::TargetView*>(view.ptr),
+        check(list_.clear_render_target(*reinterpret_cast<const recity::TargetView*>(view.ptr),
                                         {color[0], color[1], color[2], color[3]}, to_rects(count, rects)));
     }
 
@@ -256,7 +256,7 @@ public:
         d3d12_trace::record("ID3D12GraphicsCommandList::ClearDepthStencilView");
         if (type_ == D3D12_COMMAND_LIST_TYPE_BUNDLE) return check(false);
         if (!view.ptr) return check(false);
-        check(list_.clear_depth_stencil(*reinterpret_cast<const leonida::TargetView*>(view.ptr), u(flags), depth,
+        check(list_.clear_depth_stencil(*reinterpret_cast<const recity::TargetView*>(view.ptr), u(flags), depth,
                                         stencil, to_rects(count, rects)));
     }
 
@@ -346,7 +346,7 @@ private:
         return static_cast<std::uint32_t>(value);
     }
 
-    static leonida::CopyLocation location(const D3D12_TEXTURE_COPY_LOCATION& l) {
+    static recity::CopyLocation location(const D3D12_TEXTURE_COPY_LOCATION& l) {
         if (l.Type == D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT) {
             const auto& f = l.PlacedFootprint;
             return {resource_id(l.pResource), true, 0, f.Offset, f.Footprint.Width, f.Footprint.Height,
@@ -355,8 +355,8 @@ private:
         return {resource_id(l.pResource), false, l.SubresourceIndex, 0, 0, 0, 0, 0};
     }
 
-    static std::vector<leonida::Rect> to_rects(UINT count, const D3D12_RECT* rects) {
-        std::vector<leonida::Rect> out;
+    static std::vector<recity::Rect> to_rects(UINT count, const D3D12_RECT* rects) {
+        std::vector<recity::Rect> out;
         for (UINT i = 0; rects && i < count; ++i)
             out.push_back({rects[i].left, rects[i].top, rects[i].right, rects[i].bottom});
         return out;
@@ -370,7 +370,7 @@ private:
                      UINT64 src_offset, UINT count, ID3D12Resource* const* resources,
                      const D3D12_SUBRESOURCE_RANGE_UINT64* ranges) {
         if (type_ == D3D12_COMMAND_LIST_TYPE_BUNDLE || (count && (!resources || !ranges))) return check(false);
-        leonida::AtomicCopyBuffer copy{resource_id(dst), dst_offset, resource_id(src), src_offset, bytes, {}};
+        recity::AtomicCopyBuffer copy{resource_id(dst), dst_offset, resource_id(src), src_offset, bytes, {}};
         for (UINT i = 0; i < count; ++i)
             copy.dependencies.push_back(
                 {resource_id(resources[i]), ranges[i].Subresource, ranges[i].Range.Begin, ranges[i].Range.End});
@@ -379,7 +379,7 @@ private:
 
     void clear_unordered_access(D3D12_CPU_DESCRIPTOR_HANDLE view, ID3D12Resource* resource, bool is_float,
                                 const std::array<std::uint32_t, 4>& values, UINT count, const D3D12_RECT* rects) {
-        leonida::UavView target{};
+        recity::UavView target{};
         if (!view.ptr || !resource || !unordered_access_view(view, resource, target)) return check(false);
         check(list_.clear_unordered_access(target, is_float, values, to_rects(count, rects)));
     }
@@ -387,18 +387,18 @@ private:
     // The Vulkan format a descriptor's FORMAT and DST_SEL name: a UAV has no component mapping of its own, so its
     // DST_SEL is the one its format reads R, G, B, A with (gfx10::format_swizzle), which tells B8G8R8A8 from
     // R8G8B8A8. VK_FORMAT_UNDEFINED: not a format the table has.
-    static VkFormat descriptor_format(std::uint32_t code, const leonida::gfx10::Swizzle& swizzle) {
-        for (const auto& row : leonida::gfx10::format_table)
+    static VkFormat descriptor_format(std::uint32_t code, const recity::gfx10::Swizzle& swizzle) {
+        for (const auto& row : recity::gfx10::format_table)
             if (row.gfx10 == code && row.channels == swizzle) return row.vulkan;
-        return leonida::gfx10::vulkan_format(code);
+        return recity::gfx10::vulkan_format(code);
     }
 
     // A V#: stride 0 and no format is a raw buffer of NUM_RECORDS bytes, a stride without a format a structured one
     // of NUM_RECORDS records, and a format a typed one of NUM_RECORDS elements. Its address is a GPU VA, so the
     // view starts at that minus the resource's own.
     static bool unordered_access_view(D3D12_CPU_DESCRIPTOR_HANDLE handle, ID3D12Resource* resource,
-                                      leonida::UavView& out) {
-        namespace g = leonida::gfx10;
+                                      recity::UavView& out) {
+        namespace g = recity::gfx10;
         g::ImageWords words{};
         std::memcpy(words.data(), reinterpret_cast<const void*>(handle.ptr), sizeof(words));
         out.resource = resource_id(resource);
@@ -423,7 +423,7 @@ private:
         out.offset = buffer.address - base;
         if (buffer.format) {
             const VkFormat format = descriptor_format(buffer.format, buffer.swizzle);
-            const auto* layout = leonida::uav_clear::layout(format);
+            const auto* layout = recity::uav_clear::layout(format);
             if (!layout) return false;  // not a typed-UAV format
             out.format = std::uint32_t(format);
             out.element_size = layout->bytes;
@@ -439,7 +439,7 @@ private:
     }
 
     D3D12_COMMAND_LIST_TYPE type_;
-    leonida::CommandList list_;
+    recity::CommandList list_;
     bool invalid_ = false;
     UINT front_stencil_ref_ = 0;
     UINT back_stencil_ref_ = 0;
@@ -453,7 +453,7 @@ public:
     // {b4c39e02-6f71-4d8a-b25e-3e9d0f6c1a88}
     static constexpr GUID kTag{0xb4c39e02, 0x6f71, 0x4d8a, {0xb2, 0x5e, 0x3e, 0x9d, 0x0f, 0x6c, 0x1a, 0x88}};
 
-    Fence(leonida::VulkanContext& context, UINT64 initial, D3D12_FENCE_FLAGS flags)
+    Fence(recity::VulkanContext& context, UINT64 initial, D3D12_FENCE_FLAGS flags)
         : fence_(context, initial), flags_(flags), highest_(initial) {}
 
     ~Fence() override {
@@ -524,7 +524,7 @@ private:
         }
     }
 
-    leonida::VulkanFence fence_;
+    recity::VulkanFence fence_;
     D3D12_FENCE_FLAGS flags_;
     std::atomic<UINT64> highest_;
     std::mutex mutex_;
@@ -541,12 +541,12 @@ public:
     // {e1a85d76-0b3f-4c29-a7d4-58f2c6e0b913}
     static constexpr GUID kTag{0xe1a85d76, 0x0b3f, 0x4c29, {0xa7, 0xd4, 0x58, 0xf2, 0xc6, 0xe0, 0xb9, 0x13}};
 
-    CommandQueue(leonida::VulkanContext& context, VkQueue queue, std::uint32_t family,
+    CommandQueue(recity::VulkanContext& context, VkQueue queue, std::uint32_t family,
                  const D3D12_COMMAND_QUEUE_DESC& desc)
         : desc_(desc), context_(context), queue_(context, queue, family) {}
 
     bool ok() const { return queue_.ok(); }
-    leonida::ReplayResult last_result() const { return last_result_; }
+    recity::ReplayResult last_result() const { return last_result_; }
 
     D3D12_COMMAND_QUEUE_DESC STDMETHODCALLTYPE GetDesc() override {
         d3d12_trace::record("ID3D12CommandQueue::GetDesc");
@@ -556,20 +556,20 @@ public:
     void STDMETHODCALLTYPE ExecuteCommandLists(UINT count, ID3D12CommandList* const* lists) override {
         constexpr auto method = "ID3D12CommandQueue::ExecuteCommandLists";
         std::lock_guard lock(mutex_);
-        std::vector<const leonida::CommandList*> recorded;
+        std::vector<const recity::CommandList*> recorded;
         for (UINT i = 0; i < count; ++i) {
             const GraphicsCommandList* list = GraphicsCommandList::from(lists[i]);
             if (!list || list->type() == D3D12_COMMAND_LIST_TYPE_BUNDLE) {
                 std::fprintf(stderr, "[rt] d3d12: ExecuteCommandLists: list %u is not a direct command list\n", i);
-                last_result_ = leonida::ReplayResult::unsupported;
+                last_result_ = recity::ReplayResult::unsupported;
                 d3d12_trace::record(method, "failed");
                 return;
             }
             recorded.push_back(&list->commands());
         }
         last_result_ = queue_.execute(recorded);
-        d3d12_trace::record(method, last_result_ == leonida::ReplayResult::success ? "ok" : "failed");
-        if (last_result_ != leonida::ReplayResult::success)
+        d3d12_trace::record(method, last_result_ == recity::ReplayResult::success ? "ok" : "failed");
+        if (last_result_ != recity::ReplayResult::success)
             std::fprintf(stderr, "[rt] d3d12: ExecuteCommandLists failed: %s; nothing was submitted\n",
                          name(last_result_));
     }
@@ -625,15 +625,15 @@ public:
 
 private:
     D3D12_COMMAND_QUEUE_DESC desc_;
-    leonida::VulkanContext& context_;
+    recity::VulkanContext& context_;
     std::mutex mutex_;
-    leonida::VulkanQueue queue_;
-    leonida::ReplayResult last_result_ = leonida::ReplayResult::success;
+    recity::VulkanQueue queue_;
+    recity::ReplayResult last_result_ = recity::ReplayResult::success;
 };
 
 }  // namespace
 
-HRESULT create_command_queue(leonida::VulkanContext& context, VkQueue queue, std::uint32_t queue_family,
+HRESULT create_command_queue(recity::VulkanContext& context, VkQueue queue, std::uint32_t queue_family,
                              const D3D12_COMMAND_QUEUE_DESC& desc, REFIID riid, void** out, IUnknown* device) {
     if (!out) return E_POINTER;
     *out = nullptr;
@@ -667,7 +667,7 @@ HRESULT create_command_list(D3D12_COMMAND_LIST_TYPE type, ID3D12CommandAllocator
     return hand_out(object, riid, out);
 }
 
-HRESULT create_fence(leonida::VulkanContext& context, UINT64 initial_value, D3D12_FENCE_FLAGS flags, REFIID riid,
+HRESULT create_fence(recity::VulkanContext& context, UINT64 initial_value, D3D12_FENCE_FLAGS flags, REFIID riid,
                      void** out, IUnknown* device) {
     if (!out) return E_POINTER;
     *out = nullptr;
@@ -680,9 +680,9 @@ HRESULT create_fence(leonida::VulkanContext& context, UINT64 initial_value, D3D1
     return hand_out(object, riid, out);
 }
 
-leonida::ReplayResult last_execute_result(ID3D12CommandQueue* queue) {
+recity::ReplayResult last_execute_result(ID3D12CommandQueue* queue) {
     const CommandQueue* q = CommandQueue::from(queue);
-    return q ? q->last_result() : leonida::ReplayResult::unsupported;
+    return q ? q->last_result() : recity::ReplayResult::unsupported;
 }
 
 bool front_back_stencil_ref(ID3D12GraphicsCommandList8* list, UINT& front, UINT& back) {

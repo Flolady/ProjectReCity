@@ -5,7 +5,7 @@
 // (Sony vendor/product id, so SDL treats it as one and the shim takes the trigger-effect path) and a plain pad
 // without trigger motors. The test covers enumeration and device callbacks, readings and their button/axis mapping,
 // UI navigation, the guide button, rumble and trigger rumble as SDL receives them, the DualSense effect bytes for
-// each LEONIDA_DS_TRIGGERS mode, the lightbar, a dispatcher, and unplugging and replugging. No game data.
+// each RECITY_DS_TRIGGERS mode, the lightbar, a dispatcher, and unplugging and replugging. No game data.
 #include <windows.h>
 
 #include <SDL3/SDL.h>
@@ -139,10 +139,10 @@ int main() {
     for (const char* hint : {SDL_HINT_JOYSTICK_HIDAPI, SDL_HINT_JOYSTICK_RAWINPUT, SDL_HINT_JOYSTICK_WGI,
                              SDL_HINT_JOYSTICK_GAMEINPUT, SDL_HINT_XINPUT_ENABLED, SDL_HINT_JOYSTICK_DIRECTINPUT})
         SDL_SetHintWithPriority(hint, "0", SDL_HINT_OVERRIDE);
-    set_env("LEONIDA_GAMEINPUT_THREAD", "0");
-    set_env("LEONIDA_DS_TRIGGERS", nullptr);
-    set_env("LEONIDA_DS_LIGHTBAR", nullptr);
-    set_env("LEONIDA_RUMBLE", nullptr);
+    set_env("RECITY_GAMEINPUT_THREAD", "0");
+    set_env("RECITY_DS_TRIGGERS", nullptr);
+    set_env("RECITY_DS_LIGHTBAR", nullptr);
+    set_env("RECITY_RUMBLE", nullptr);
 
     auto create = reinterpret_cast<GameInputCreateFn>(rt::shims::find("gameinput.dll", "GameInputCreate"));
     check(create != nullptr, "gameinput.dll!GameInputCreate is registered");
@@ -177,7 +177,7 @@ int main() {
 
     // ---- an Xbox-style pad with impulse triggers ----
     Pad xbox;
-    attach(xbox, "Leonida virtual Xbox pad", 0x045E, 0x0B12, true);
+    attach(xbox, "ReCity virtual Xbox pad", 0x045E, 0x0B12, true);
     check(xbox.js != nullptr, "virtual Xbox pad attached");
     rt::gameinput::poll();
     check(rt::gameinput::connected_count() == 1, "the shim opened it");
@@ -197,7 +197,7 @@ int main() {
                                           GameInputRumbleLeftTrigger | GameInputRumbleRightTrigger),
           "info.supportedRumbleMotors: both motors and both triggers");
     check(info->controllerAxisCount == 6 && info->controllerAxisInfo && info->gamepadInfo && info->displayName &&
-              std::strcmp(info->displayName->data, "Leonida virtual Xbox pad") == 0,
+              std::strcmp(info->displayName->data, "ReCity virtual Xbox pad") == 0,
           "info axis table, gamepad info and display name");
     check(dev->GetDeviceStatus() & GameInputDeviceConnected, "GetDeviceStatus: connected");
     check(xbox.player == 0, "player index 0 for the first pad");
@@ -292,27 +292,27 @@ int main() {
     rt::gameinput::poll();
     check(xbox.low == 0 && xbox.high == 0 && xbox.left == 0 && xbox.right == 0, "SetRumbleState(nullptr) stops rumble");
 
-    set_env("LEONIDA_RUMBLE", "0");
+    set_env("RECITY_RUMBLE", "0");
     rt::gameinput::reload_config();
     dev->SetRumbleState(&rumble);
     rt::gameinput::poll();
-    check(xbox.low == 0 && xbox.left == 0, "LEONIDA_RUMBLE=0 keeps the motors off");
-    set_env("LEONIDA_RUMBLE", nullptr);
+    check(xbox.low == 0 && xbox.left == 0, "RECITY_RUMBLE=0 keeps the motors off");
+    set_env("RECITY_RUMBLE", nullptr);
     rt::gameinput::reload_config();
     dev->SetRumbleState(nullptr);
     rt::gameinput::poll();
 
     // ---- a DualSense: trigger rumble becomes adaptive-trigger effects ----
-    set_env("LEONIDA_DS_LIGHTBAR", "ff8000");
+    set_env("RECITY_DS_LIGHTBAR", "ff8000");
     rt::gameinput::reload_config();
     Pad ds;
-    attach(ds, "Leonida virtual DualSense", 0x054C, 0x0CE6, true);
+    attach(ds, "ReCity virtual DualSense", 0x054C, 0x0CE6, true);
     rt::gameinput::poll();
     rt::gameinput::OutputState out{};
     check(rt::gameinput::connected_count() == 2 && rt::gameinput::output_state(1, &out) && out.is_dualsense,
           "a Sony 054c:0ce6 pad is handled as a DualSense");
     check(ds.player == 1, "player index 1 for the second pad");
-    check(ds.led_calls >= 1 && ds.led[0] == 0xFF && ds.led[1] == 0x80 && ds.led[2] == 0x00, "LEONIDA_DS_LIGHTBAR=ff8000");
+    check(ds.led_calls >= 1 && ds.led[0] == 0xFF && ds.led[1] == 0x80 && ds.led[2] == 0x00, "RECITY_DS_LIGHTBAR=ff8000");
     IGameInputDevice* dsdev = g_device_events.empty() ? nullptr : g_device_events.back().device;
     check(dsdev && dsdev != dev && (dsdev->GetDeviceInfo()->supportedRumbleMotors & GameInputRumbleLeftTrigger),
           "DualSense device reported with trigger motors");
@@ -329,7 +329,7 @@ int main() {
     check(ds.effect[21] == 0x06 && ds.effect[23] == 255, "rumble mode: left trigger vibrates at full");
     check(ds.trigger_calls == 0, "a DualSense gets effects, not SDL_RumbleGamepadTriggers");
 
-    set_env("LEONIDA_DS_TRIGGERS", "resistance");
+    set_env("RECITY_DS_TRIGGERS", "resistance");
     rt::gameinput::reload_config();
     ds_rumble = {0, 0, 0.0f, 1.0f};
     dsdev->SetRumbleState(&ds_rumble);
@@ -337,15 +337,15 @@ int main() {
     check(ds.effect[10] == 0x01 && ds.effect[12] == 255 && ds.effect[21] == 0x05,
           "resistance mode: right trigger resists, left trigger off");
 
-    set_env("LEONIDA_DS_TRIGGERS", "off");
+    set_env("RECITY_DS_TRIGGERS", "off");
     rt::gameinput::reload_config();
     const int effect_calls = ds.effect_calls;
     ds_rumble = {0, 0, 1.0f, 1.0f};
     dsdev->SetRumbleState(&ds_rumble);
     rt::gameinput::poll();
-    check(ds.effect_calls == effect_calls, "LEONIDA_DS_TRIGGERS=off sends no trigger effect");
-    set_env("LEONIDA_DS_TRIGGERS", nullptr);
-    set_env("LEONIDA_DS_LIGHTBAR", nullptr);
+    check(ds.effect_calls == effect_calls, "RECITY_DS_TRIGGERS=off sends no trigger effect");
+    set_env("RECITY_DS_TRIGGERS", nullptr);
+    set_env("RECITY_DS_LIGHTBAR", nullptr);
     rt::gameinput::reload_config();
 
     // The most recent reading of any device: move the DualSense.
@@ -366,7 +366,7 @@ int main() {
 
     // ---- a pad without trigger motors ----
     Pad plain;
-    attach(plain, "Leonida virtual plain pad", 0x057E, 0x2009, false);  // Switch Pro ids: rumble, no trigger motors
+    attach(plain, "ReCity virtual plain pad", 0x057E, 0x2009, false);  // Switch Pro ids: rumble, no trigger motors
     rt::gameinput::poll();
     IGameInputDevice* plaindev = g_device_events.empty() ? nullptr : g_device_events.back().device;
     check(plaindev && (plaindev->GetDeviceInfo()->supportedRumbleMotors & GameInputRumbleLeftTrigger) == 0,
@@ -414,7 +414,7 @@ int main() {
     if (found) found->Release();
 
     Pad xbox2;
-    attach(xbox2, "Leonida virtual Xbox pad", 0x045E, 0x0B12, true);
+    attach(xbox2, "ReCity virtual Xbox pad", 0x045E, 0x0B12, true);
     rt::gameinput::poll();
     check(g_device_events.back().device == dev && (g_device_events.back().current & GameInputDeviceConnected),
           "the same pad plugged back in is the same device object");

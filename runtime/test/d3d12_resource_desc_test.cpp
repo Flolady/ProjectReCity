@@ -1,6 +1,6 @@
 // Compare ID3D12Resource::GetDesc on the Vulkan-backed device with Windows D3D12 (the default adapter and WARP):
 // what a description that leaves fields at their defaults (Alignment 0, MipLevels 0) reads back as.
-// No game data or shaders. Run explicitly (needs Vulkan hardware); LEONIDA_VK_VALIDATION=1 checks Vulkan usage.
+// No game data or shaders. Run explicitly (needs Vulkan hardware); RECITY_VK_VALIDATION=1 checks Vulkan usage.
 #include "vk_test_device.h"
 #include "../shims/d3d12_com.h"
 #include <dxgi1_4.h>

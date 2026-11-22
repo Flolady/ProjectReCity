@@ -30,7 +30,7 @@ from check import (CMPX_CLASS_WORDS, CVT_F32_SAT_CASES, GRADIENT_TESTS, TEST_PRO
                    TEXTURE_MIP_TEST, GATHER_WRAP, USER_SGPRS_ENV, USER_SGPRS_WORDS, Skip, mesh_v5_test, not_found_message,
                    pick_build_dir, start_failure, texture_gradient_a16_test, texture_mip_test)
 from check import TEXOFF_ARGS, texoff_problem   # ps_texoff's expected words and arguments live in check.py
-from check import gpu_test_timeout, timed_out   # per-program time limit (LEONIDA_GPU_TEST_TIMEOUT)
+from check import gpu_test_timeout, timed_out   # per-program time limit (RECITY_GPU_TEST_TIMEOUT)
 from check import WAVE32_LANE_DUMPS, narrow_subgroup_skip   # wave32 lane-mask dumps skip below 32 lanes, as in check.py
 
 
@@ -226,7 +226,7 @@ def unsupported_skip(msg: str) -> str:
 
 
 def run_cmd(cmd: list[str], env: dict | None = None, gpu: bool = True) -> tuple[int, str]:
-    # A hung GPU test program fails its test instead of stalling the suite (check.py, LEONIDA_GPU_TEST_TIMEOUT).
+    # A hung GPU test program fails its test instead of stalling the suite (check.py, RECITY_GPU_TEST_TIMEOUT).
     # gpu=False (the translator over the whole suite) runs without a limit.
     limit = gpu_test_timeout() if gpu else None
     try:
@@ -242,10 +242,10 @@ def w64_emulated() -> bool:
     # Wave64 emulation on: the suite runs every wave64 check without asking for a 64-wide
     # subgroup, matching check.py (W64_EMULATED). Accepts "1"/"true"/"yes"/"on" and tolerates
     # the trailing space cmd.exe's `set VAR=1 &` leaves in the value.
-    return (os.environ.get("LEONIDA_W64_EMULATE") or "").strip().lower() in ("1", "true", "yes", "on")
+    return (os.environ.get("RECITY_W64_EMULATE") or "").strip().lower() in ("1", "true", "yes", "on")
 def wavemask_check(vk_compute: str, spv: str, env: dict | None, emulated: bool) -> tuple[bool | None, str]:
     """cs_wavemask, as in check.py: (passed, detail), passed None for a skip. The native build needs a 64-wide
-    subgroup and skips where the device has none; with LEONIDA_W64_EMULATE=1 it was translated with
+    subgroup and skips where the device has none; with RECITY_W64_EMULATE=1 it was translated with
     --wave64-emulate and runs on any subgroup size, so it asks for none."""
     cmd = [vk_compute, spv, "1", "wavemask"] + ([] if emulated else ["--require-wave64"])
     rc, msg = run_cmd(cmd, env=env)
@@ -508,7 +508,7 @@ def main() -> int:
                  "Vulkan headers (vulkan-headers on Arch) and configure again.")
     a.build = resolved_build
 
-    work = a.work or tempfile.mkdtemp(prefix="leonida_gpu_tests_")
+    work = a.work or tempfile.mkdtemp(prefix="recity_gpu_tests_")
     try:
         return run_suite(a, work)
     finally:
@@ -665,8 +665,8 @@ def run_suite(a, work: str) -> int:
                             else f"{len(wrong)}/{n} inputs wrong, first {wrong[0]}"))
         elif name == "cs_wavemask":
             # Whole-wave mask test, as in check.py: needs a 64-wide subgroup, skipped where the device has none.
-            # With LEONIDA_W64_EMULATE=1 it was translated with --wave64-emulate and runs on any subgroup size.
-            emulated = os.environ.get("LEONIDA_W64_EMULATE") == "1"
+            # With RECITY_W64_EMULATE=1 it was translated with --wave64-emulate and runs on any subgroup size.
+            emulated = os.environ.get("RECITY_W64_EMULATE") == "1"
             args = [] if emulated else ["--require-wave64"]
             rc, msg = run_cmd([vk_compute, spv, "1", "wavemask", *args], env=cs_env)
             # Whole-wave mask test, as in check.py (require_wave64=not W64_EMULATED): ask for a 64-wide
@@ -682,7 +682,7 @@ def run_suite(a, work: str) -> int:
             else:
                 results.append((name, rc == 0, msg.splitlines()[-1] if msg else ""))
             results.append((name,) + wavemask_check(vk_compute, spv, cs_env,
-                                                    os.environ.get("LEONIDA_W64_EMULATE") == "1"))
+                                                    os.environ.get("RECITY_W64_EMULATE") == "1"))
         elif name in ("cs_store", "cs_smem_soffset_imm", "cs_w32_lane_wrap", "cs_movrelsd_2", "cs_w32_permute", "cs_w32_lds_u8_d16", "cs_wave64_ballot", "cs_wm_half_ops", "cs_wm_half_cmp", "cs_wm_bfm64", "cs_wm_scc_rfl", "cs_wqm_w64", "cs_wqm_w32", "cs_wqm_w64_half",
 
                       "cs_w64_mask_detect",
@@ -738,7 +738,7 @@ def run_suite(a, work: str) -> int:
             # Every dump but cs_store / cs_smem_soffset_imm / cs_w32_lane_wrap / cs_movrelsd_2 / cs_w32_permute /
             # cs_w32_lds_u8_d16 and the wave32 cs_wqm_w32 / cs_bpermute32 is a whole-wave (wave64) mask test:
             # ask for a 64-wide subgroup and skip, as check.py does, where the device has none (vk_compute_test
-            # exits 77) instead of reporting a failure. With LEONIDA_W64_EMULATE=1 they were translated with
+            # exits 77) instead of reporting a failure. With RECITY_W64_EMULATE=1 they were translated with
             # --wave64-emulate and run on any subgroup size.
             # cs_w64x_partial (a 40-thread group) can't have full subgroups: it asks for size 64 without them.
             emulated = w64_emulated()

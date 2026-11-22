@@ -3,7 +3,7 @@
 // the same for integers) and for non-normalized coordinates (CreateSampler's S# with FORCE_UNNORMALIZED). Which
 // descriptions the PC runtime refuses, and the D3D12_OPTIONS17 answer, are compared with the host's runtime live
 // when there is one: a refused description leaves the slot as it was. No shaders or game data. Set
-// LEONIDA_VK_VALIDATION=1 to run under VK_LAYER_KHRONOS_validation; any validation error fails.
+// RECITY_VK_VALIDATION=1 to run under VK_LAYER_KHRONOS_validation; any validation error fails.
 #include "vk_test_device.h"
 #include "../shims/d3d12_com.h"
 #include "../src/gfx10_descriptors.h"
@@ -194,8 +194,8 @@ std::vector<Edge> edge_answers(ID3D12Device11* device, Slots& slots) {
     };
 }
 
-leonida::gfx10::SamplerWords words_of(const std::vector<unsigned char>& bytes) {
-    leonida::gfx10::SamplerWords w{};
+recity::gfx10::SamplerWords words_of(const std::vector<unsigned char>& bytes) {
+    recity::gfx10::SamplerWords w{};
     std::memcpy(w.data(), bytes.data(), sizeof(w));
     return w;
 }
@@ -245,8 +245,8 @@ int main() {
         const auto never_words = words_of(via1(comparison));
         EXPECT(never_words != regular_words);
         EXPECT(words_of(via2(desc2(comparison))) == never_words);
-        const auto regular_info = leonida::gfx10::vulkan_sampler(leonida::gfx10::decode(regular_words));
-        const auto never_info = leonida::gfx10::vulkan_sampler(leonida::gfx10::decode(never_words));
+        const auto regular_info = recity::gfx10::vulkan_sampler(recity::gfx10::decode(regular_words));
+        const auto never_info = recity::gfx10::vulkan_sampler(recity::gfx10::decode(never_words));
         EXPECT(!regular_info.compareEnable);
         EXPECT(never_info.compareEnable && never_info.compareOp == VK_COMPARE_OP_NEVER);
 
@@ -256,17 +256,17 @@ int main() {
         const D3D12_SAMPLER_DESC border = sampler(D3D12_FILTER_MIN_MAG_MIP_LINEAR, D3D12_TEXTURE_ADDRESS_MODE_BORDER);
         const D3D12_SAMPLER_DESC2 border2 = desc2(border);
         const auto marked = [](std::vector<unsigned char> bytes) {
-            leonida::gfx10::SamplerWords w = words_of(bytes);
-            w[3] |= leonida::gfx10::kIntegerBorderPtr;
+            recity::gfx10::SamplerWords w = words_of(bytes);
+            w[3] |= recity::gfx10::kIntegerBorderPtr;
             std::memcpy(bytes.data(), w.data(), sizeof(w));
             return bytes;
         };
         for (const std::array<UINT, 4> c : {std::array<UINT, 4>{0, 0, 0, 0}, {0, 0, 0, 1}, {1, 1, 1, 1}}) {
             const std::vector<unsigned char> got = via2(with_uint_border(border2, c[0], c[1], c[2], c[3]));
             EXPECT(got == marked(via1(with_border(border, FLOAT(c[0]), FLOAT(c[1]), FLOAT(c[2]), FLOAT(c[3])))));
-            const leonida::gfx10::Sampler s = leonida::gfx10::decode(words_of(got));
+            const recity::gfx10::Sampler s = recity::gfx10::decode(words_of(got));
             EXPECT(s.integer_border && s.border_color_index == 0);
-            EXPECT(leonida::gfx10::vulkan_sampler(s).borderColor ==
+            EXPECT(recity::gfx10::vulkan_sampler(s).borderColor ==
                    (c[3] == 0   ? VK_BORDER_COLOR_INT_TRANSPARENT_BLACK
                     : c[0] == 0 ? VK_BORDER_COLOR_INT_OPAQUE_BLACK
                                 : VK_BORDER_COLOR_INT_OPAQUE_WHITE));
@@ -285,14 +285,14 @@ int main() {
             D3D12_SAMPLER_DESC desc = sampler(filter, D3D12_TEXTURE_ADDRESS_MODE_CLAMP, 0.0f);
             desc.AddressV = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
             desc.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-            const leonida::gfx10::SamplerWords normalized = words_of(via1(desc));
-            const leonida::gfx10::SamplerWords got =
+            const recity::gfx10::SamplerWords normalized = words_of(via1(desc));
+            const recity::gfx10::SamplerWords got =
                 words_of(via2(desc2(desc, D3D12_SAMPLER_FLAG_NON_NORMALIZED_COORDINATES)));
-            leonida::gfx10::SamplerWords want = normalized;
+            recity::gfx10::SamplerWords want = normalized;
             want[0] |= 1u << 15;
             EXPECT(got == want);
-            EXPECT(leonida::gfx10::decode(got).unnormalized);
-            EXPECT(!leonida::gfx10::decode(normalized).unnormalized);
+            EXPECT(recity::gfx10::decode(got).unnormalized);
+            EXPECT(!recity::gfx10::decode(normalized).unnormalized);
         }
 
         // A null handle is ignored.

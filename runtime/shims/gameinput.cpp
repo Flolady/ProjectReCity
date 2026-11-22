@@ -8,12 +8,12 @@
 //   - GetCurrentReading / GetNextReading, GetGamepadState, GetUiNavigationState, controller axes and buttons
 //   - SetRumbleState: the two body motors through SDL_RumbleGamepad, the impulse-trigger motors through
 //     SDL_RumbleGamepadTriggers on pads that have them; on a DualSense the trigger signal becomes an adaptive-trigger
-//     effect (SDL_SendGamepadEffect), as set by LEONIDA_DS_TRIGGERS. That is an approximation of the Xbox impulse
+//     effect (SDL_SendGamepadEffect), as set by RECITY_DS_TRIGGERS. That is an approximation of the Xbox impulse
 //     trigger signal, not the PS5 version's authored effects.
-//   - DualSense/DualShock 4 lightbar colour (LEONIDA_DS_LIGHTBAR) and the player LEDs by connection order
+//   - DualSense/DualShock 4 lightbar colour (RECITY_DS_LIGHTBAR) and the player LEDs by connection order
 //
 // One thread owns SDL: the background poll thread by default, or the caller of rt::gameinput::poll() when
-// LEONIDA_GAMEINPUT_THREAD=0. Title calls never touch SDL: they read the latest snapshot and leave rumble requests
+// RECITY_GAMEINPUT_THREAD=0. Title calls never touch SDL: they read the latest snapshot and leave rumble requests
 // that the next poll applies (2 ms at most with the thread). Callbacks run on the poll thread, as GameInput runs them
 // on its own threads, unless the title created a dispatcher; then IGameInputDispatcher::Dispatch delivers them.
 //
@@ -86,15 +86,15 @@ std::string env(const char* name) {
 
 rt::gameinput::Config read_config() {
     rt::gameinput::Config c;
-    const std::string t = env("LEONIDA_DS_TRIGGERS");
+    const std::string t = env("RECITY_DS_TRIGGERS");
     if (t == "off" || t == "0") c.ds_triggers = rt::gameinput::DsTriggerMode::Off;
     else if (t == "resistance") c.ds_triggers = rt::gameinput::DsTriggerMode::Resistance;
-    else if (!t.empty() && t != "rumble") std::fprintf(stderr, "[rt] gameinput: LEONIDA_DS_TRIGGERS=%s unknown, using rumble\n", t.c_str());
-    if (const std::string g = env("LEONIDA_DS_TRIGGER_GAIN"); !g.empty())
+    else if (!t.empty() && t != "rumble") std::fprintf(stderr, "[rt] gameinput: RECITY_DS_TRIGGERS=%s unknown, using rumble\n", t.c_str());
+    if (const std::string g = env("RECITY_DS_TRIGGER_GAIN"); !g.empty())
         c.ds_trigger_gain = std::clamp(static_cast<float>(std::atof(g.c_str())), 0.0f, 4.0f);
-    if (const std::string f = env("LEONIDA_DS_TRIGGER_FREQ"); !f.empty())
+    if (const std::string f = env("RECITY_DS_TRIGGER_FREQ"); !f.empty())
         c.ds_trigger_frequency = static_cast<uint8_t>(std::clamp(std::atoi(f.c_str()), 1, 255));
-    if (const std::string l = env("LEONIDA_DS_LIGHTBAR"); !l.empty()) {
+    if (const std::string l = env("RECITY_DS_LIGHTBAR"); !l.empty()) {
         if (l == "off") {
             c.lightbar_set = true;
         } else if (l.size() == 6 && l.find_first_not_of("0123456789abcdef") == std::string::npos) {
@@ -104,11 +104,11 @@ rt::gameinput::Config read_config() {
             c.lightbar[1] = static_cast<uint8_t>(rgb >> 8);
             c.lightbar[2] = static_cast<uint8_t>(rgb);
         } else {
-            std::fprintf(stderr, "[rt] gameinput: LEONIDA_DS_LIGHTBAR=%s is not RRGGBB or off, ignored\n", l.c_str());
+            std::fprintf(stderr, "[rt] gameinput: RECITY_DS_LIGHTBAR=%s is not RRGGBB or off, ignored\n", l.c_str());
         }
     }
-    if (env("LEONIDA_RUMBLE") == "0") c.rumble = false;
-    if (env("LEONIDA_GAMEINPUT_THREAD") == "0") c.background_thread = false;
+    if (env("RECITY_RUMBLE") == "0") c.rumble = false;
+    if (env("RECITY_GAMEINPUT_THREAD") == "0") c.background_thread = false;
     return c;
 }
 

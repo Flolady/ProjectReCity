@@ -4,7 +4,7 @@
 ; on an ordinary SGPR pair. Lanes where (lane & 5) != 0: 48 of 64. A wave32 mis-detect counts 24.
 ; Run: VKC_SUBGROUP_SIZE=64 vk_compute_test cs_w64_mask_detect.spv 1 dump --require-wave64
 ;   -> out[0] = 48
-; With LEONIDA_W64_EMULATE=1 the same on a 32-wide subgroup.
+; With RECITY_W64_EMULATE=1 the same on a 32-wide subgroup.
 v_and_b32_e32 v5, 5, v0
 v_cmp_ne_u32_e64 s[20:21], 0, v5
 s_bcnt1_i32_b64 s30, s[20:21]

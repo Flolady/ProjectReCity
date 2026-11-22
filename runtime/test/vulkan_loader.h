@@ -24,7 +24,7 @@ inline PFN_vkGetInstanceProcAddr load_vulkan() {
 #elif defined(__APPLE__)
     static const auto entry = []() -> void* {
         // The default is direct MoltenVK: a portability driver would otherwise require instance opt-in.
-        const char* requested = std::getenv("LEONIDA_VULKAN_LOADER");
+        const char* requested = std::getenv("RECITY_VULKAN_LOADER");
         const bool overridden = requested && *requested;
         const char* name = overridden ? requested : "libMoltenVK.dylib";
         auto library = dlopen(name, RTLD_NOW | RTLD_LOCAL);

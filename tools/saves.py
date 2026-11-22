@@ -16,7 +16,7 @@ Commands
                                  copy the ASAV/JSAV payloads out of plain save folders into the on-disk layout
                                  of the offline XGameSave shim (runtime/shims/xgameruntime_services.cpp):
                                  DIR/local-user/<container>/<blob>, names %-encoded the same way.
-                                 DIR defaults to %LOCALAPPDATA%\\Leonida\\saves (the shim's LEONIDA_SAVE_DIR default).
+                                 DIR defaults to %LOCALAPPDATA%\\ReCity\\saves (the shim's RECITY_SAVE_DIR default).
                                  VERIFY: container/blob names are a guess until the executable shows them; by default
                                  container = slot name (from the ASAV header), blob = payload file name. Use --map.
 """
@@ -366,10 +366,10 @@ def import_saves(args):
     if not folders:
         raise SystemExit('import: give one or more save folders')
     if out is None:
-        out = os.path.join(os.environ.get('LOCALAPPDATA', '.'), 'Leonida', 'saves')
+        out = os.path.join(os.environ.get('LOCALAPPDATA', '.'), 'ReCity', 'saves')
     root = os.path.join(out, 'local-user')
     manifest = {'note': 'VERIFY: container/blob names are a guess until the executable shows them',
-                'layout': '<LEONIDA_SAVE_DIR>/local-user/<container>/<blob>', 'entries': []}
+                'layout': '<RECITY_SAVE_DIR>/local-user/<container>/<blob>', 'entries': []}
     plan = []
     for folder in folders:
         sd, payload, slot, title = save_slot(folder)

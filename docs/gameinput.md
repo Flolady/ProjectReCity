@@ -6,8 +6,8 @@ every controller SDL supports works the way an Xbox pad would: DualSense, DualSh
 rest of SDL's controller database. On a DualSense the impulse-trigger rumble becomes adaptive-trigger effects, and
 the lightbar colour can be set.
 
-Without the shim the loader would bind `GameInputCreate` to the host's `GameInput.dll` if there is one
-([#279](https://github.com/ItsNotRexed/Leonida/pull/279)). That works for Xbox pads only, and gives no DualSense
+Without the shim the loader would bind `GameInputCreate` to the host's `GameInput.dll` if there is one.
+That works for Xbox pads only, and gives no DualSense
 features. The game executable is not available yet, so whether it imports GameInput this way, and under which
 module, is unverified (see [VERIFY](#verify)).
 
@@ -18,13 +18,13 @@ SDL3 is available in one of these ways:
 
 - **Installed SDL3**, 3.2 or newer, found by `find_package(SDL3)`: set `SDL3_DIR` or `CMAKE_PREFIX_PATH`, for example
   `-DSDL3_DIR=C:/SDL3/cmake`. No flag is needed.
-- **`-DLEONIDA_SDL3_FETCH=ON`**: downloads the pinned release `SDL3-3.4.20.tar.gz` from SDL's GitHub releases once at
+- **`-DRECITY_SDL3_FETCH=ON`**: downloads the pinned release `SDL3-3.4.20.tar.gz` from SDL's GitHub releases once at
   configure time, checks its SHA-256, and builds it static with only the gamepad parts (no audio, video, GPU or
   render). That takes about a minute on the first build. `scripts/build_runtime.ps1 -FetchSdl3` passes it.
 - **A local copy of that tarball**: extract it and pass `-DFETCHCONTENT_SOURCE_DIR_SDL3=<path to SDL3-3.4.20>`; it is
   built the same way, without a download.
 
-Without any of these, or with `-DLEONIDA_SDL3=OFF`, configure prints a message and `gta6rt` is built without the shim:
+Without any of these, or with `-DRECITY_SDL3=OFF`, configure prints a message and `gta6rt` is built without the shim:
 it has no `GameInputCreate`, as before, so the loader binds it to the host's `GameInput.dll` or the unimplemented
 thunk. `gameinput_test` and `gameinput_probe` are not built, and CTest lists `gameinput` as not run (disabled) rather
 than failing.
@@ -70,7 +70,7 @@ every pad that has rumble. The two trigger motors depend on the pad:
 - Xbox One and Series pads (and anything else SDL reports trigger rumble for): `SDL_RumbleGamepadTriggers`, the same
   impulse triggers as on console.
 - DualSense: the trigger level becomes an adaptive-trigger effect sent with `SDL_SendGamepadEffect`, chosen by
-  `LEONIDA_DS_TRIGGERS`.
+  `RECITY_DS_TRIGGERS`.
 - Others (DualShock 4, Switch Pro): the trigger levels are dropped and the device reports no trigger motors.
 
 **This is an approximation.** The Xbox title only sends an impulse-trigger vibration level per frame. The PS5 version
@@ -83,9 +83,9 @@ format `test/testcontroller.c` uses): byte 0 holds the valid flags `0x04 | 0x08`
 bytes 10-20 the right trigger effect and bytes 21-31 the left one. The effect modes are the three SDL's test program
 uses:
 
-| `LEONIDA_DS_TRIGGERS` | level 0 | level > 0 |
+| `RECITY_DS_TRIGGERS` | level 0 | level > 0 |
 |---|---|---|
-| `rumble` (default) | `05` (effect off) | `06 <freq> <level*255> 00`: vibration at `LEONIDA_DS_TRIGGER_FREQ` Hz from the start of the pull |
+| `rumble` (default) | `05` (effect off) | `06 <freq> <level*255> 00`: vibration at `RECITY_DS_TRIGGER_FREQ` Hz from the start of the pull |
 | `resistance` | `05` | `01 00 <level*255>`: constant resistance over the whole pull |
 | `off` | nothing is sent; the triggers stay as they are | |
 
@@ -95,12 +95,12 @@ An effect is sent only when its bytes change, so a steady level costs one report
 
 | variable | default | effect |
 |---|---|---|
-| `LEONIDA_DS_TRIGGERS` | `rumble` | DualSense trigger effects: `off`, `rumble` or `resistance` (above) |
-| `LEONIDA_DS_TRIGGER_GAIN` | `1` | scales the trigger level before it becomes an effect, 0..4 |
-| `LEONIDA_DS_TRIGGER_FREQ` | `30` | vibration frequency of the `rumble` mode, 1..255 |
-| `LEONIDA_DS_LIGHTBAR` | unset | `RRGGBB` (hex) sets the DualSense/DualShock 4 lightbar when the pad connects; `off` turns it dark; unset keeps SDL's player colour |
-| `LEONIDA_RUMBLE` | `1` | `0` turns all rumble and trigger output off |
-| `LEONIDA_GAMEINPUT_THREAD` | `1` | `0` stops the background poll thread; only `rt::gameinput::poll()` then reads the pads (tests) |
+| `RECITY_DS_TRIGGERS` | `rumble` | DualSense trigger effects: `off`, `rumble` or `resistance` (above) |
+| `RECITY_DS_TRIGGER_GAIN` | `1` | scales the trigger level before it becomes an effect, 0..4 |
+| `RECITY_DS_TRIGGER_FREQ` | `30` | vibration frequency of the `rumble` mode, 1..255 |
+| `RECITY_DS_LIGHTBAR` | unset | `RRGGBB` (hex) sets the DualSense/DualShock 4 lightbar when the pad connects; `off` turns it dark; unset keeps SDL's player colour |
+| `RECITY_RUMBLE` | `1` | `0` turns all rumble and trigger output off |
+| `RECITY_GAMEINPUT_THREAD` | `1` | `0` stops the background poll thread; only `rt::gameinput::poll()` then reads the pads (tests) |
 
 SDL's own hints (`SDL_JOYSTICK_*`, see SDL's `SDL_hints.h`) also apply, for example `SDL_JOYSTICK_HIDAPI_PS5=0` to
 leave a DualSense to the generic driver, or `SDL_GAMECONTROLLERCONFIG` to add a mapping for an unknown pad.
@@ -129,7 +129,7 @@ serial or device path) the title gets the same object back, connected again.
 
 ## ABI
 
-`runtime/shims/gameinput_abi.h` declares the v0 GameInput API as Leonida's own code: the interfaces in vtable order,
+`runtime/shims/gameinput_abi.h` declares the v0 GameInput API as ReCity's own code: the interfaces in vtable order,
 the enums the shim uses and the structs it has to lay out. It was written against Microsoft's public v0 header (the
 GDK version, also published as the `Microsoft.GameInput` NuGet package 0.2303.22621.3038). The header is not in the
 repository. Its struct offsets were checked by compiling both side by side with `offsetof` asserts for every field the
@@ -142,7 +142,7 @@ shim fills (`GameInputDeviceInfo` 320 bytes with `deviceFamily` at 96 and the in
   `rt::shims::find` with SDL virtual joysticks, an Xbox-style pad with trigger motors, a DualSense (Sony
   `054c:0ce6`) and a pad without trigger motors. It checks enumeration and device callbacks, the button, stick,
   trigger and UI-navigation mapping, reading callbacks and sequence numbers, the guide button, motor and trigger
-  rumble as SDL receives them, the DualSense effect bytes in each `LEONIDA_DS_TRIGGERS` mode, the lightbar, a
+  rumble as SDL receives them, the DualSense effect bytes in each `RECITY_DS_TRIGGERS` mode, the lightbar, a
   dispatcher, async and blocking enumeration, unregistering, and unplugging and replugging.
 - `gameinput_probe [--seconds N] [--rumble]` (by hand, with a pad connected): lists the pads, plays each motor and
   trigger for a second with `--rumble`, then prints the live reading.

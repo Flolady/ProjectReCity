@@ -18,7 +18,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace leonida {
+namespace recity {
 
 inline constexpr std::uint32_t tile_size_in_bytes = 65536;  // D3D12_TILED_RESOURCE_TILE_SIZE_IN_BYTES
 inline constexpr std::uint32_t packed_tile = 0xffffffff;    // D3D12_PACKED_TILE
@@ -127,4 +127,4 @@ inline bool resource_tiling(const TilingDesc& desc, ResourceTiling& out) {
     return true;
 }
 
-} // namespace leonida
+} // namespace recity

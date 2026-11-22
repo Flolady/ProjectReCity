@@ -1,7 +1,7 @@
 """Run the Windows build's CTest tests under Wine, on Linux.
 
 Usage:
-    python -I scripts/run_wine_tests.py --tests ctest.json --windows-root D:/a/Leonida/Leonida
+    python -I scripts/run_wine_tests.py --tests ctest.json --windows-root D:/a/ReCity/ReCity
         [--root DIR] [--wine CMD] [--require NAME ...] [--timeout SECONDS] [--summary FILE]
 
 --tests is the output of `ctest --show-only=json-v1` from the Windows build, and --windows-root the checkout it was
