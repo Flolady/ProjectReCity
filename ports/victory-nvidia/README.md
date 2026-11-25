@@ -85,6 +85,19 @@ Same machine, warm cache, frames of 3,000 draws or more after the first ten in t
 | z53 | `VICTORY_INPLACE=2` | 3.1 | 320 | 64.8 | 215 ms | 114 ms |
 | z54 | `VICTORY_CARD_WINDOWS_MB=1024` | stopped at 184 s by the memory guard (1.1 GB of commit left); while loading: GPU part 7-37 ms, copies 400-850 ms | | | | |
 | z55 | `VICTORY_COPY_PLAIN=1 VICTORY_MERGE_GAP=64 VICTORY_MERGE_RUNS=4096` | 4.8 | 207 | 42.7 | 4 ms | 0 ms |
+| z57 | `VICTORY_JOIN_PARTS=1 VICTORY_BACK_OWN_VIEW=1 VICTORY_CARD_REHASH_RUNS=1` | 5.8 | 173 | 37.4 | 60 ms | 49 ms |
+| z58 | z57's and `VICTORY_WIDE_REFRESH=1` (**now in `Launch.ps1`**) | 5.9 | 170 | **35.4** | 62 ms | 54 ms |
+| z59 | z58's, `--console series-s` | 6.8 | 146 | 32.9 | 36 ms | 32 ms |
+
+- **z57 + z58: about 10 % less time per draw**, from four switches that are in the fork but off by default
+  (fxceless measured the first three; `VICTORY_WIDE_REFRESH`, a submission's refreshes on several threads, had no
+  published measurement). z58 ran 8 minutes with no device loss. z57 ended at 451 s because the USB enclosure
+  of the disk holding the game reset (Windows logged disk errors 51 and 153 at that second), not because of the
+  switches.
+- **Series S profile: faster, but the picture is black.** The scene is drawn (its 1280x720 G-buffer targets show
+  it), and the title presents two planes (0x48 bytes apart); what reaches the window is a dark letterboxed fill
+  whichever plane is shown (`VICTORY_PRESENT_PLANE`, added by the patch). No shader is refused there that is not
+  refused in the Series X profile. Where the chain from the 720p scene to the presented plane breaks is not known.
 
 Run-to-run spread is large (a cold-cache run of the same build gave 53.4 ms per 1,000 draws), so z55 against z50
 is no gain and no loss.
