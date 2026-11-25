@@ -2,6 +2,15 @@
 
 What Project ReCity has changed, newest first. The state of every subsystem is in [ROADMAP.md](ROADMAP.md).
 
+## 2026-11-25 — VIctory on NVIDIA: ~5 fps in the open world
+
+- New [ports/victory-nvidia/](ports/victory-nvidia/README.md): a patch for fxceless's NVIDIA fork of VIctory
+  (`ca8829f`) with wave64 lowering for 32-lane hosts and physical-page alias tracking (from ztrx), DexNom's cube-map
+  LOD and pixel quad-read fixes, and diagnostics, plus a launcher with the measured settings.
+- On an RTX 3060 Ti (driver 616.92): the open world of the first mission at ~5 fps steady (0.7-2 with ztrx), no
+  device loss in 7-9 minute runs; whole-pack translation +35 vertex/pixel programs and every compute pipeline
+  created. Still wrong: stripes in the G-buffer normals of lit clothing.
+
 ## 2026-11-22 — New README and build guide
 
 - The README is rewritten from scratch: a short pitch, a pipeline diagram, a progress table, a three-line quick

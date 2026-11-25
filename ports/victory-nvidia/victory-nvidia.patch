@@ -1,0 +1,1591 @@
+diff --git a/crates/victory-gpu/src/capture.rs b/crates/victory-gpu/src/capture.rs
+index 64695fe..4f9b1e6 100644
+--- a/crates/victory-gpu/src/capture.rs
++++ b/crates/victory-gpu/src/capture.rs
+@@ -76,13 +76,24 @@ pub(crate) fn op(list: usize, what: impl FnOnce() -> String) {
+                     *in_frame = (frame, 0);
+                 }
+                 in_frame.1 += 1;
+-                if in_frame.1 > 300 {
++                // `VICTORY_RING_PER_FRAME`: more lines of a frame (a failure in the frame that
++                // starts the ray-tracing structure builder, whose stages come after 300).
++                static PER_FRAME: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
++                let cap = *PER_FRAME.get_or_init(|| {
++                    std::env::var("VICTORY_RING_PER_FRAME").ok().and_then(|v| v.parse().ok()).unwrap_or(300)
++                });
++                if in_frame.1 > cap {
+                     return;
+                 }
+             }
+             let what = what();
++            // `VICTORY_RING_LINES`: a longer ring (default `RING_LINES`).
++            static TOTAL: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
++            let total = *TOTAL.get_or_init(|| {
++                std::env::var("VICTORY_RING_LINES").ok().and_then(|v| v.parse().ok()).unwrap_or(RING_LINES)
++            });
+             let mut ring = RING.lock().unwrap_or_else(|e| e.into_inner());
+-            if ring.len() >= RING_LINES {
++            if ring.len() >= total {
+                 ring.pop_front();
+             }
+             ring.push_back(format!("frame {frame} list {list:#x} {what}"));
+@@ -107,6 +118,140 @@ pub(crate) fn op(list: usize, what: impl FnOnce() -> String) {
+     }
+ }
+ 
++/// With a capture folder: bytes the GPU wrote put back into title memory (`Shadow::copy_back`),
++/// appended at once to `writebacks.txt` with the frame and whether the copy is a window
++/// outside buffers (memory shaders reach by raw address) or a buffer's.
++#[cfg(feature = "diagnostics")]
++pub(crate) fn writeback(address: usize, len: usize, window: bool) {
++    title_write(if window { "window" } else { "buffer" }, address, len, 0);
++}
++
++/// Diagnostics: which physical memory (a section of xmem's and the offset in it) title memory
++/// `[at, at + len)` shows through the title's views: "-" for private memory, "holes" or
++/// "scattered" for a range several views (or none for a part) hold.
++#[cfg(feature = "diagnostics")]
++pub fn phys_of(at: usize, len: usize) -> String {
++    #[cfg(windows)]
++    {
++        match crate::inplace::cover(at, len) {
++            crate::inplace::Cover::None => "-".into(),
++            crate::inplace::Cover::Holes => "holes".into(),
++            crate::inplace::Cover::Scattered => "scattered".into(),
++            crate::inplace::Cover::Run(section, offset) => format!("{section:#x}:{offset:#x}"),
++        }
++    }
++    #[cfg(not(windows))]
++    {
++        let _ = (at, len);
++        "-".into()
++    }
++}
++
++/// Diagnostics: the runtime mapped a view of physical memory, to `writebacks.txt`.
++#[cfg(feature = "diagnostics")]
++pub(crate) fn view_mapped(at: usize, len: usize, section: usize, offset: u64) {
++    title_write(&format!("view {section:#x}:{offset:#x}"), at, len, 0);
++}
++
++/// Ranges of title memory to look for pointers into ([`mark_asset`]).
++#[cfg(feature = "diagnostics")]
++static MARKED: std::sync::Mutex<Vec<(usize, usize)>> = std::sync::Mutex::new(Vec::new());
++
++/// Diagnostics: a block of title memory (an asset DirectStorage loaded, picked by
++/// `VICTORY_MARK_ASSET`) whose address is looked for in what the host writes into title memory.
++#[cfg(feature = "diagnostics")]
++pub fn mark_asset(start: usize, len: usize) {
++    MARKED.lock().unwrap_or_else(|e| e.into_inner()).push((start, len));
++    title_write("marked", start, len, 0);
++}
++
++/// Diagnostics: each aligned qword of `bytes` (about to be written at `at` in title memory) that
++/// points into a marked block, to `writebacks.txt`.
++#[cfg(feature = "diagnostics")]
++pub(crate) fn scan_marked(kind: &str, at: usize, bytes: &[u8]) {
++    let marked = MARKED.lock().unwrap_or_else(|e| e.into_inner()).clone();
++    if marked.is_empty() {
++        return;
++    }
++    let skip = (8 - at % 8) % 8;
++    let Some(aligned) = bytes.get(skip..) else {
++        return;
++    };
++    for (i, q) in aligned.chunks_exact(8).enumerate() {
++        let v = u64::from_le_bytes(q.try_into().unwrap_or_default()) as usize;
++        if let Some(&(start, _)) = marked.iter().find(|(s, n)| v >= *s && v < s + n) {
++            title_write(&format!("{kind}-points-at-marked+{:#x}", v - start), at + skip + i * 8, 8, v);
++        }
++    }
++}
++
++/// [`scan_marked`] over title memory as it is now (after a copy into it).
++#[cfg(feature = "diagnostics")]
++pub(crate) fn scan_marked_at(kind: &str, at: usize, len: usize) {
++    if MARKED.lock().unwrap_or_else(|e| e.into_inner()).is_empty() || len > 64 << 20 {
++        return;
++    }
++    let mut bytes = vec![0u8; len];
++    if crate::host::read_into(at as *const u8, &mut bytes) {
++        scan_marked(kind, at, &bytes);
++    }
++}
++
++/// With a capture folder: any write of the host into title memory (`kind`: "window"/"buffer" for
++/// the GPU's write-back, "copy" for a buffer copy run at submission, "memcopy" for
++/// `CopyMemoryToMemoryX`, "readback" for a texture read-back), with its source when it has one,
++/// appended at once to `writebacks.txt`.
++#[cfg(feature = "diagnostics")]
++pub(crate) fn title_write(kind: &str, address: usize, len: usize, source: usize) {
++    use std::io::Write;
++    static FILE: std::sync::Mutex<Option<std::fs::File>> = std::sync::Mutex::new(None);
++    let Some(folder) = folder() else {
++        return;
++    };
++    let mut file = FILE.lock().unwrap_or_else(|e| e.into_inner());
++    if file.is_none() {
++        *file = std::fs::OpenOptions::new().create(true).append(true).open(folder.join("writebacks.txt")).ok();
++    }
++    if let Some(f) = file.as_mut() {
++        let frame = crate::queue::presented() + 1;
++        let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_micros());
++        let phys = phys_of(address, len);
++        let _ = writeln!(f, "frame {frame} {kind} {address:#x}+{len:#x} from {source:#x} t {t} phys {phys}");
++    }
++}
++
++/// With a capture folder: a dispatch of the ray-tracing structure builder, appended at once to
++/// `builder-ops.txt` with the frame (its root views' title addresses say where it writes; the
++/// file is whole even if the title crashes right after).
++#[cfg(feature = "diagnostics")]
++pub(crate) fn builder_op(what: impl FnOnce() -> String) {
++    use std::io::Write;
++    static FILE: std::sync::Mutex<Option<std::fs::File>> = std::sync::Mutex::new(None);
++    let Some(folder) = folder() else {
++        return;
++    };
++    let mut file = FILE.lock().unwrap_or_else(|e| e.into_inner());
++    if file.is_none() {
++        *file = std::fs::OpenOptions::new().create(true).append(true).open(folder.join("builder-ops.txt")).ok();
++    }
++    if let Some(f) = file.as_mut() {
++        let frame = crate::queue::presented() + 1;
++        let _ = writeln!(f, "frame {frame} {}", what());
++    }
++}
++
++/// Writes the last lines of [`op`] before the world to `name` in the capture folder (a host
++/// GPU failure before the world: what was recorded last).
++#[cfg(feature = "diagnostics")]
++pub(crate) fn write_ring(name: &str) {
++    if let Some(folder) = folder() {
++        let lines: Vec<String> = RING.lock().unwrap_or_else(|e| e.into_inner()).iter().cloned().collect();
++        if !lines.is_empty() {
++            let _ = std::fs::write(folder.join(name), lines.join("\n"));
++        }
++    }
++}
++
+ /// The last lines of [`op`] before the world.
+ #[cfg(feature = "diagnostics")]
+ static RING: std::sync::Mutex<std::collections::VecDeque<String>> =
+@@ -461,6 +606,43 @@ fn dump_one(
+             };
+             tracing::info!(?resource, depths = ?most(depths), top_bytes = ?most(tops), "24-bit depth plane values (value, texels)");
+         }
++        // Small targets (exposure, luminance, counters): their values as numbers, which the
++        // normalized picture does not keep.
++        if (f.Width as usize) * (f.Height as usize) <= 256 {
++            let f16 = |h: u16| -> f32 {
++                let (s, e, m) = ((h >> 15) as u32, ((h >> 10) & 0x1f) as u32, (h & 0x3ff) as u32);
++                let v = if e == 0 {
++                    (m as f32) * 2f32.powi(-24)
++                } else if e == 31 {
++                    if m == 0 { f32::INFINITY } else { f32::NAN }
++                } else {
++                    (1.0 + m as f32 / 1024.0) * 2f32.powi(e as i32 - 15)
++                };
++                if s == 1 { -v } else { v }
++            };
++            let texel = |x: usize, y: usize| -> String {
++                let at = y * pitch;
++                let r = |k: usize, n: usize| &rows[at + k..at + k + n];
++                let w32 = |k: usize| u32::from_le_bytes(r(k, 4).try_into().unwrap_or([0; 4]));
++                let w16 = |k: usize| u16::from_le_bytes(r(k, 2).try_into().unwrap_or([0; 2]));
++                match d.Format.0 {
++                    2 => format!("({} {} {} {})", f32::from_bits(w32(x * 16)), f32::from_bits(w32(x * 16 + 4)), f32::from_bits(w32(x * 16 + 8)), f32::from_bits(w32(x * 16 + 12))),
++                    10 => format!("({} {} {} {})", f16(w16(x * 8)), f16(w16(x * 8 + 2)), f16(w16(x * 8 + 4)), f16(w16(x * 8 + 6))),
++                    34 => format!("({} {})", f16(w16(x * 4)), f16(w16(x * 4 + 2))),
++                    41 => format!("{}", f32::from_bits(w32(x * 4))),
++                    54 => format!("{}", f16(w16(x * 2))),
++                    16 => format!("({} {})", f32::from_bits(w32(x * 8)), f32::from_bits(w32(x * 8 + 4))),
++                    _ => format!("{:#x}", w32(x * 4)),
++                }
++            };
++            let mut values = Vec::new();
++            for y in 0..f.Height as usize {
++                for x in 0..f.Width as usize {
++                    values.push(texel(x, y));
++                }
++            }
++            tracing::info!(frame, ?resource, width = f.Width, height = f.Height, format = d.Format.0, values = values.join(" "), "small target values");
++        }
+         if let Some(rgba) = to_rgba(f.Format.0 as u32, f.Width as usize, f.Height as usize, pitch, rows) {
+             let name = format!(
+                 "frame-{frame}-{i:02}-{resource:?}-{}x{}-f{}",
+diff --git a/crates/victory-gpu/src/draw.rs b/crates/victory-gpu/src/draw.rs
+index 59108b9..9a4d113 100644
+--- a/crates/victory-gpu/src/draw.rs
++++ b/crates/victory-gpu/src/draw.rs
+@@ -645,6 +645,16 @@ fn root_view(list: &HostList, address: u64, srv: bool) -> Option<u64> {
+     Some(gpu)
+ }
+ 
++/// 64 KiB of zeros in the list's scratch memory, for a root view the title points at memory
++/// that has no host copy.
++fn zero_view(list: &HostList) -> Option<u64> {
++    const LEN: usize = 1 << 16;
++    static ZEROS: [u8; LEN] = [0; LEN];
++    let (gpu, to) = list.scratch(LEN as u64)?;
++    list.defer_fill(to, ZEROS.as_ptr(), LEN);
++    Some(gpu)
++}
++
+ macro_rules! once {
+     ($($arg:tt)*) => {{
+         static ONCE: std::sync::Once = std::sync::Once::new();
+@@ -1261,10 +1271,26 @@ impl State {
+                         }
+                         continue;
+                     }
+-                    let Some(mut gpu) = root_view(list, address, srv) else {
+-                        continue;
++                    let (mut gpu, zeros) = match root_view(list, address, srv) {
++                        Some(gpu) => (gpu, false),
++                        // No host copy covers the address: a zeroed stretch rather than a
++                        // root parameter left unset, which the card reads as whatever was set
++                        // before or as nothing (the device was lost 2 s after the ray-tracing
++                        // structure builder started: a stage's root SRV at a title address
++                        // had no host copy). A read gives zero, as a title page without a host
++                        // copy does through memory by address.
++                        None => {
++                            once!(
++                                address = format_args!("{address:#x}"),
++                                "a root view with no host copy reads zeros"
++                            );
++                            match zero_view(list) {
++                                Some(gpu) => (gpu, true),
++                                None => continue,
++                            }
++                        }
+                     };
+-                    if biased {
++                    if biased && !zeros {
+                         gpu -= u64::from(self.host_word(
+                             compute,
+                             victory_shader::emit::USER_VIEW_BIAS,
+@@ -2256,6 +2282,10 @@ impl State {
+         }
+         #[cfg(feature = "diagnostics")]
+         list.note_op(|| self.op_text(format!("dispatch {x}x{y}x{z}"), true));
++        #[cfg(feature = "diagnostics")]
++        if crate::pipeline::is_builder(self.pipeline as This) {
++            crate::capture::builder_op(|| self.op_text(format!("dispatch {x}x{y}x{z}"), true));
++        }
+         // SAFETY: an open list with everything set.
+         unsafe { list.list.Dispatch(x, y, z) };
+         DISPATCHED.fetch_add(1, Ordering::Relaxed);
+@@ -3369,6 +3399,12 @@ impl State {
+         list.note_op(|| {
+             self.op_text(format!("indirect kind {kind} max {max} at {arguments:#x}"), kind == DISPATCH)
+         });
++        #[cfg(feature = "diagnostics")]
++        if crate::pipeline::is_builder(self.pipeline as This) {
++            crate::capture::builder_op(|| {
++                self.op_text(format!("indirect kind {kind} max {max} at {arguments:#x}"), kind == DISPATCH)
++            });
++        }
+         if kind == MESH {
+             self.mesh_scissor(list, true);
+         }
+diff --git a/crates/victory-gpu/src/host.rs b/crates/victory-gpu/src/host.rs
+index 8494aea..081b1d2 100644
+--- a/crates/victory-gpu/src/host.rs
++++ b/crates/victory-gpu/src/host.rs
+@@ -556,6 +556,10 @@ pub(crate) fn fail(what: std::fmt::Arguments) -> ! {
+             text.push_str(&format!("; device removed: {e}"));
+             log_removal_context();
+         }
++        // The last operations recorded before the world (with a capture folder and
++        // `VICTORY_CAPTURE_WORLD`): what was in flight when the card was lost early.
++        #[cfg(feature = "diagnostics")]
++        crate::capture::write_ring("failure-ops.txt");
+         match host.log_messages() {
+             Some(first) => text.push_str(&format!("; debug layer: {first}")),
+             None if host.messages.is_none() => text.push_str(
+@@ -3622,6 +3626,8 @@ fn read_backs(list: &HostList) {
+         unsafe {
+             if buffer.Map(0, None, Some(&mut data)).is_ok() && !data.is_null() {
+                 let from = data.cast::<u8>().cast_const();
++                #[cfg(feature = "diagnostics")]
++                crate::capture::title_write("readback", *at, *rows * *pitch, 0);
+                 for line in 0..*rows {
+                     std::ptr::copy_nonoverlapping(from.add(line * row.next_multiple_of(256)), (*at as *mut u8).add(line * pitch), *row);
+                 }
+@@ -6911,7 +6917,11 @@ impl HostList {
+                     batch.title_wrote(dst, len);
+                     #[cfg(feature = "diagnostics")]
+                     fill_check::copy_runs(dst, src, len);
++                    #[cfg(feature = "diagnostics")]
++                    crate::capture::title_write("copy", dst, len, src);
+                     copy_mapped(dst as *mut u8, src as *const u8, len, true);
++                    #[cfg(feature = "diagnostics")]
++                    crate::capture::scan_marked_at("copy", dst, len);
+                     // With the submission's one asking: the journal learns it.
+                     crate::watch::wrote(dst, len);
+                     len
+@@ -7403,6 +7413,8 @@ fn direct_writes() -> bool {
+ /// Copies host memory into title memory after a submission (what shaders
+ /// wrote), leaving pages that are not mapped alone.
+ pub(crate) fn write_mapped(dst: *mut u8, src: *const u8, len: usize) {
++    #[cfg(feature = "diagnostics")]
++    crate::capture::title_write("mapped", dst as usize, len, 0);
+     use windows_sys::Win32::System::Diagnostics::Debug::WriteProcessMemory;
+     use windows_sys::Win32::System::Threading::GetCurrentProcess;
+     let direct = direct_writes();
+diff --git a/crates/victory-gpu/src/lib.rs b/crates/victory-gpu/src/lib.rs
+index 4ec7d6f..00482fc 100644
+--- a/crates/victory-gpu/src/lib.rs
++++ b/crates/victory-gpu/src/lib.rs
+@@ -74,6 +74,8 @@ mod texture;
+ #[cfg(windows)]
+ mod watch;
+ 
++#[cfg(feature = "diagnostics")]
++pub use capture::{mark_asset, phys_of};
+ #[cfg(windows)]
+ pub use host::on_failure;
+ #[cfg(windows)]
+diff --git a/crates/victory-gpu/src/list.rs b/crates/victory-gpu/src/list.rs
+index 3bf89f3..a0b9a30 100644
+--- a/crates/victory-gpu/src/list.rs
++++ b/crates/victory-gpu/src/list.rs
+@@ -1360,8 +1360,12 @@ extern "system" fn copy_memory(this: This, dst: u64, src: u64, len: u64, _flags:
+             if crate::texture::committed(src as *const u8, len)
+                 && crate::texture::committed(dst as *const u8, len)
+             {
++                #[cfg(feature = "diagnostics")]
++                crate::capture::title_write("memcopy", dst as usize, len, src as usize);
+                 // SAFETY: both ranges are committed title memory.
+                 unsafe { std::ptr::copy(src as *const u8, dst as *mut u8, len) };
++                #[cfg(feature = "diagnostics")]
++                crate::capture::scan_marked_at("memcopy", dst as usize, len);
+             }
+         });
+     }
+diff --git a/crates/victory-gpu/src/memory.rs b/crates/victory-gpu/src/memory.rs
+index c256367..7fe3e90 100644
+--- a/crates/victory-gpu/src/memory.rs
++++ b/crates/victory-gpu/src/memory.rs
+@@ -116,7 +116,7 @@ impl Memory {
+ 
+     /// Gives the page of `address` its copy, if it has none and the memory
+     /// is the title's.
+-    fn map(&mut self, address: u64) {
++    fn map(&mut self, address: u64, why: &str) {
+         let page = address / PAGE;
+         // The last entry stays empty: addresses past the directory read it.
+         if page >= u64::from(MEMORY_PAGES) - 1 {
+@@ -157,6 +157,13 @@ impl Memory {
+             None if self.copies.len() < COPIES as usize => {
+                 self.copies.push(shadow.clone());
+                 let n = self.copies.len() - 1;
++                #[cfg(feature = "diagnostics")]
++                {
++                    let (first, len) = shadow.span();
++                    crate::capture::title_write(&format!("numbered-{n}-{why}"), first as usize, len as usize, address as usize);
++                }
++                #[cfg(not(feature = "diagnostics"))]
++                let _ = why;
+                 // Every page the copy holds whole, not only the one asked
+                 // for: a structure is more than 64 KiB.
+                 // shortcut: a page of a title buffer inside this one that
+@@ -221,15 +228,15 @@ impl Memory {
+             }
+         }
+         for page in pages {
+-            self.map(u64::from(page) * PAGE);
++            self.map(u64::from(page) * PAGE, "fault");
+         }
+     }
+ 
+     /// What a dispatch names: the copy around `address` and the 4 MiB
+     /// after it.
+-    fn name(&mut self, address: u64) {
+-        self.map(address);
+-        self.map((address & !(CELL - 1)) + CELL);
++    fn name(&mut self, address: u64, why: &str) {
++        self.map(address, why);
++        self.map((address & !(CELL - 1)) + CELL, why);
+     }
+ }
+ 
+@@ -259,7 +266,7 @@ pub(crate) fn ready(
+     }
+     let numbered = m.copies.len();
+     for &address in addresses {
+-        m.name(address);
++        m.name(address, "view");
+     }
+     // A title address in two constants (low dword, then bits 32 to 39), or
+     // in one in 256-byte units. A constant that only looks like one names
+@@ -269,10 +276,10 @@ pub(crate) fn ready(
+             && (1..=0xFF).contains(&high)
+             && c >= 0x1_0000
+         {
+-            m.name(u64::from(c) | u64::from(high) << 32);
++            m.name(u64::from(c) | u64::from(high) << 32, "pair");
+         }
+         if c >= 0x0100_0000 {
+-            m.name(u64::from(c) << 8);
++            m.name(u64::from(c) << 8, "units");
+         }
+     }
+     let key = std::ptr::from_ref(heap) as usize;
+diff --git a/crates/victory-gpu/src/queue.rs b/crates/victory-gpu/src/queue.rs
+index 84009e5..16f3b2d 100644
+--- a/crates/victory-gpu/src/queue.rs
++++ b/crates/victory-gpu/src/queue.rs
+@@ -1263,6 +1263,21 @@ pub(crate) fn presented() -> u64 {
+     FRAMES.load(Ordering::Relaxed)
+ }
+ 
++/// `VICTORY_FRAME_SLEEP_MS=<ms>` (diagnostics): each present from frame
++/// `VICTORY_FRAME_SLEEP_FROM` (default 2300) on waits that long, to see what
++/// the title does at the frame times of a slow pass without that pass.
++#[cfg(feature = "diagnostics")]
++fn slow_frame(frame: u64) {
++    static SLEEP: std::sync::OnceLock<(u64, u64)> = std::sync::OnceLock::new();
++    let (ms, from) = *SLEEP.get_or_init(|| {
++        let get = |name: &str| std::env::var(name).ok().and_then(|v| v.trim().parse::<u64>().ok());
++        (get("VICTORY_FRAME_SLEEP_MS").unwrap_or(0), get("VICTORY_FRAME_SLEEP_FROM").unwrap_or(2300))
++    });
++    if ms > 0 && frame >= from {
++        std::thread::sleep(std::time::Duration::from_millis(ms));
++    }
++}
++
+ /// Shows the first plane's first resource in our window.
+ ///
+ /// shortcut: one plane, no scaling or placement, the source expected in
+@@ -1334,6 +1349,8 @@ fn present_now(this: This, planes: u32, plane_parameters: *const Plane) -> HRESU
+             "presents sent behind their queue's line so far (VICTORY_ASYNC_PRESENT=1); the others ran the old way"
+         );
+     }
++    #[cfg(feature = "diagnostics")]
++    slow_frame(frame);
+     if frame.is_power_of_two() {
+         let (draws, dispatches) = crate::list::take_counts();
+         #[cfg(windows)]
+diff --git a/crates/victory-gpu/src/shadow.rs b/crates/victory-gpu/src/shadow.rs
+index bb9d802..b94ae5e 100644
+--- a/crates/victory-gpu/src/shadow.rs
++++ b/crates/victory-gpu/src/shadow.rs
+@@ -3135,9 +3135,15 @@ impl Shadow {
+             busy.sort_unstable();
+             let (mut at, mut bytes) = (from, 0);
+             for (a, e) in busy {
++                let (a, e) = (a.max(from), e.min(to));
+                 if a > at {
+                     bytes += self.update_free(at, a);
+                 }
++                // Under them, what the title wrote since it was last copied
++                // (`update_busy`).
++                if e > a.max(at) {
++                    bytes += self.update_busy(a.max(at), e);
++                }
+                 at = at.max(e);
+             }
+             if at < to {
+@@ -3148,6 +3154,73 @@ impl Shadow {
+         self.update_free(from, to)
+     }
+ 
++    /// [`Shadow::update`] of `[from, to)` where a list submitted earlier
++    /// declared that shaders write. None of this submission's shaders has run
++    /// when it refreshes, so the pages the title wrote since they were last
++    /// copied are copied as anywhere else; and the same bytes go into the
++    /// snapshot [`Shadow::writing`] took, so the copy-back neither takes them
++    /// for the GPU's nor puts them back over a later title write. Skipped (as
++    /// before), the title's sizes and constants there stayed stale for the
++    /// whole submission, and the copy-back could put older bytes back over
++    /// what the title wrote: with the ray-tracing structure builder on, the
++    /// title read +infinity (0x7f800000) and -1 as pointers and crashed at
++    /// the same place whichever half of the builder's programs ran.
++    /// Ported from VIctory upstream (#1322, "GPU: copy title writes under
++    /// ranges a submission's shaders write", Kevin Pratap Sidhu), to this
++    /// fork's page tracking (`watch::writes`, `copied`) and whole-copy
++    /// snapshot. Memory that is not write-watched is left as before.
++    fn update_busy(&self, from: usize, to: usize) -> usize {
++        if self.watched.load(Ordering::Relaxed) == NOT_WATCHED {
++            return 0;
++        }
++        let Some((now, written)) = crate::watch::writes(from, to, true) else {
++            return 0;
++        };
++        let (start, end) = (self.start as usize, (self.start + self.len) as usize);
++        let base = start / PAGE;
++        // The runs of pages the title wrote after their last copy.
++        let mut runs: Vec<(usize, usize)> = Vec::new();
++        {
++            let mut copied = self.copied.lock().unwrap_or_else(|e| e.into_inner());
++            for &(page, write) in &written {
++                let Some(at) = copied.get_mut(page.wrapping_sub(base)) else { continue };
++                if *at == 0 || write <= *at {
++                    continue;
++                }
++                let (a, b) = ((page * PAGE).max(from), ((page + 1) * PAGE).min(to));
++                if a >= b {
++                    continue;
++                }
++                if (page * PAGE).max(start) >= from && ((page + 1) * PAGE).min(end) <= to {
++                    *at = now;
++                }
++                match runs.last_mut() {
++                    Some(last) if last.1 == a => last.1 = b,
++                    _ => runs.push((a, b)),
++                }
++            }
++        }
++        let mut bytes = 0;
++        for &(a, b) in &runs {
++            bytes += self.copy(a, b);
++        }
++        if runs.is_empty() || self.card.is_some() {
++            return bytes;
++        }
++        let mut before = self.before.lock().unwrap_or_else(|e| e.into_inner());
++        if let Some(snapshot) = before.as_mut() {
++            for &(a, b) in &runs {
++                let (a, b) = (a.max(start) - start, b.min(end) - start);
++                if a < b && b <= snapshot.len() {
++                    // SAFETY: inside the copy's mapping and the snapshot,
++                    // both `len` bytes.
++                    unsafe { std::ptr::copy_nonoverlapping(self.data.add(a), snapshot.as_mut_ptr().add(a), b - a) };
++                }
++            }
++        }
++        bytes
++    }
++
+     /// [`Shadow::update`] of `[from, to)` (inside the buffer) where no
+     /// shader writes.
+     fn update_free(&self, from: usize, to: usize) -> usize {
+diff --git a/crates/victory-loader/src/crash.rs b/crates/victory-loader/src/crash.rs
+index 3f77a88..b054a5a 100644
+--- a/crates/victory-loader/src/crash.rs
++++ b/crates/victory-loader/src/crash.rs
+@@ -506,6 +506,31 @@ unsafe fn report(what: &str, info: *const EXCEPTION_POINTERS, to_file: bool) {
+         context.R14,
+         context.R15
+     ));
++    // What the registers point at, and one pointer further (+8): the slot a
++    // corrupted pointer was read from (diagnostics; only memory that is
++    // committed and readable is read).
++    #[cfg(feature = "diagnostics")]
++    for (name, v) in [
++        ("rax", context.Rax),
++        ("rbx", context.Rbx),
++        ("rsi", context.Rsi),
++        ("rdi", context.Rdi),
++        ("r12", context.R12),
++        ("r13", context.R13),
++        ("r14", context.R14),
++        ("r15", context.R15),
++    ] {
++        if let Some(words) = peek(v as usize) {
++            line(format!("  [{name} {v:#x}] {}", words.iter().map(|w| format!("{w:#x}")).collect::<Vec<_>>().join(" ")));
++            if let Some(next) = peek(words[1] as usize) {
++                line(format!(
++                    "    [[{name}+8] {:#x}] {}",
++                    words[1],
++                    next.iter().map(|w| format!("{w:#x}")).collect::<Vec<_>>().join(" ")
++                ));
++            }
++        }
++    }
+     for (i, pc) in unwind(*context).into_iter().enumerate() {
+         line(format!("  #{i:<2} {}", locate(pc as usize)));
+     }
+@@ -621,6 +646,35 @@ fn module_of(address: usize) -> Option<String> {
+ /// broke (with the module, for an image's pages). Each points at a different
+ /// cause: a wild pointer, an allocation whose commit failed, a stack
+ /// overrun, a write to code or constants.
++/// The 8 qwords at `address` if all 64 bytes are committed and readable in one
++/// region (diagnostics: a crash report's look at what registers point to).
++#[cfg(feature = "diagnostics")]
++fn peek(address: usize) -> Option<[u64; 8]> {
++    use windows_sys::Win32::System::Memory::{
++        MEM_COMMIT, MEMORY_BASIC_INFORMATION, PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE, PAGE_GUARD, PAGE_READONLY,
++        PAGE_READWRITE, PAGE_WRITECOPY, VirtualQuery,
++    };
++    if address < 0x10000 || address % 8 != 0 {
++        return None;
++    }
++    // SAFETY: a zeroed MEMORY_BASIC_INFORMATION is valid.
++    let mut info: MEMORY_BASIC_INFORMATION = unsafe { std::mem::zeroed() };
++    // SAFETY: reads the address space's bookkeeping, not `address` itself.
++    if unsafe { VirtualQuery(address as *const _, &mut info, size_of_val(&info)) } == 0 {
++        return None;
++    }
++    let readable = matches!(
++        info.Protect & 0xff,
++        PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE
++    );
++    let end = info.BaseAddress as usize + info.RegionSize;
++    if info.State != MEM_COMMIT || !readable || info.Protect & PAGE_GUARD != 0 || address + 64 > end {
++        return None;
++    }
++    // SAFETY: 64 committed, readable bytes of one region.
++    Some(unsafe { std::ptr::read_unaligned(address as *const [u64; 8]) })
++}
++
+ fn memory_at(address: usize) -> String {
+     use windows_sys::Win32::System::Memory::{
+         MEM_FREE, MEM_IMAGE, MEM_RESERVE, MEMORY_BASIC_INFORMATION, PAGE_EXECUTE,
+diff --git a/crates/victory-shader/src/emit/bitcode.rs b/crates/victory-shader/src/emit/bitcode.rs
+index eff0ac0..e9c1ffc 100644
+--- a/crates/victory-shader/src/emit/bitcode.rs
++++ b/crates/victory-shader/src/emit/bitcode.rs
+@@ -284,6 +284,16 @@ impl Module {
+     pub fn int_const(&mut self, ty: Ty, v: i64) -> V {
+         self.constant(ty, Const::Int(v))
+     }
++    /// The value of `v` when it is an integer constant (its low 32 bits).
++    pub fn known_i32(&self, v: V) -> Option<u32> {
++        match v {
++            V::Const(i) => match self.consts.get(i as usize) {
++                Some((_, Const::Int(x))) => Some(*x as u32),
++                _ => None,
++            },
++            _ => None,
++        }
++    }
+     pub fn i32(&mut self, v: u32) -> V {
+         let t = self.int(32);
+         self.int_const(t, i64::from(v as i32))
+diff --git a/crates/victory-shader/src/emit/lower.rs b/crates/victory-shader/src/emit/lower.rs
+index 63c4de7..241dba5 100644
+--- a/crates/victory-shader/src/emit/lower.rs
++++ b/crates/victory-shader/src/emit/lower.rs
+@@ -27,6 +27,7 @@ pub(super) mod intersect;
+ 
+ type Why = &'static str;
+ 
++
+ /// How an interpolation evaluates an input channel.
+ #[derive(Debug, Clone, Copy)]
+ enum Eval {
+@@ -255,6 +256,9 @@ struct Lower<'a> {
+     /// With `exchange`: VGPR values every lane holds alike ([`lane_uniform`]); a first-lane
+     /// read of one needs nothing from the other host wave.
+     uniform: HashSet<Value>,
++    /// VGPR values the same in every lane in EXEC where `v_readfirstlane` reads them
++    /// ([`active_uniform`]).
++    active_uniform: HashSet<Value>,
+     /// With `exchange`: the wave ORs that only steer a loop over each lane's own bits, which
+     /// a host wave takes over its own lanes wherever they stand ([`super::own_bits`]).
+     own_bits: super::own_bits::OwnBits,
+@@ -501,6 +505,80 @@ fn lane_uniform(p: &Program, st: &Structured, all: &[bool]) -> HashSet<Value> {
+     same
+ }
+ 
++/// VGPR values the same in every lane that is in EXEC where `v_readfirstlane` reads them
++/// ([`lane_uniform`] asks more: the same in every lane holding them, so it leaves out guarded
++/// writes and loop-carried values). Here a guarded write counts (the lanes in EXEC all compute
++/// the same), so does an LDS read at such an address (one read, one value), and a phi does
++/// where every lane runs the predecessors, or at a loop header entered by one edge and
++/// re-entered by one back edge (in one iteration its lanes all come one way).
++/// shortcut: taken as true where the read stands: the lanes in EXEC there all ran the value's
++/// last definition (no lane that skipped it joins them before the read). That holds for a
++/// value carried round a loop that lanes only leave: the structure builder's sum of the
++/// totals of the waves before its own (`XboxBvhBuilder` programs, `v_readfirstlane` at
++/// 0x1d4: the loop's lanes all hold the running sum).
++fn active_uniform(p: &Program, st: &Structured, all: &[bool]) -> HashSet<Value> {
++    let is_mask = |v: Value| st.masks.contains_key(&v) || st.highs.contains_key(&v);
++    let order = crate::ir::reverse_postorder(&p.blocks);
++    let mut at = vec![usize::MAX; p.blocks.len()];
++    for (n, &b) in order.iter().enumerate() {
++        at[b] = n;
++    }
++    let mut same: HashSet<Value> = HashSet::new();
++    for _ in 0..16 {
++        let before = same.len();
++        for &b in &order {
++            let block = &p.blocks[b];
++            let whole = block.preds.iter().all(|&q| all.get(q).copied().unwrap_or(false));
++            let back = block.preds.iter().filter(|&&q| at.get(q).is_some_and(|&n| n >= at[b])).count();
++            let ahead = block.preds.len() - back;
++            for phi in &block.phis {
++                if matches!(phi.reg, Reg::V(_))
++                    && (whole || back == 1 && ahead == 1)
++                    && phi.args.iter().all(|a| same.contains(a))
++                {
++                    same.insert(phi.value);
++                }
++            }
++            for inst in &block.insts {
++                let name = inst.name();
++                let ops: Vec<Operand> = match &inst.fields {
++                    Fields::Valu(v)
++                        if v.dpp.is_none()
++                            && v.sdwa.is_none()
++                            && !name.starts_with("v_mbcnt")
++                            && !name.starts_with("v_cmpx")
++                            && !name.contains("lane") =>
++                    {
++                        v.src.clone()
++                    }
++                    Fields::Ds { addr: Some(a), .. } if name.starts_with("ds_read") && !name.contains("addtid") => {
++                        vec![*a]
++                    }
++                    _ => continue,
++                };
++                let alike = ops.iter().all(|op| match *op {
++                    Operand::Vector { reg, .. } => {
++                        let read: Vec<Value> =
++                            inst.reads.iter().filter(|r| matches!(r.0, Reg::V(x) if x >= reg)).map(|r| r.1).collect();
++                        !read.is_empty() && read.iter().all(|x| same.contains(x))
++                    }
++                    Operand::Scalar { code, .. } if code != NULL => {
++                        inst.read(Reg::S(code)).is_none_or(|x| !is_mask(x) || same.contains(&x))
++                    }
++                    _ => true,
++                });
++                if alike {
++                    same.extend(inst.writes.iter().filter(|w| matches!(w.0, Reg::V(_))).map(|w| w.1));
++                }
++            }
++        }
++        if same.len() == before {
++            break;
++        }
++    }
++    same
++}
++
+ /// What a register value holds, for [`wave_local`].
+ #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+ enum Wave {
+@@ -1282,6 +1360,7 @@ impl<'a> Lower<'a> {
+                 let n = i.name();
+                 n.starts_with("ds_swizzle")
+                     || n.contains("permute")
++                    || n.starts_with("v_permlane")
+                     || n.starts_with("v_mbcnt")
+                     || matches!(n, "v_readlane_b32" | "v_writelane_b32")
+                     || matches!(&i.fields, Fields::Valu(v) if v.dpp.is_some())
+@@ -1548,6 +1627,10 @@ impl<'a> Lower<'a> {
+                 Some((_, false, all)) if !LOCAL_WAVES.get() => lane_uniform(p, x.st, all),
+                 _ => HashSet::new(),
+             },
++            active_uniform: match &exchange {
++                Some((_, false, all)) if !LOCAL_WAVES.get() => active_uniform(p, x.st, all),
++                _ => HashSet::new(),
++            },
+             own_bits: match &exchange {
+                 Some((_, false, _)) if !LOCAL_WAVES.get() && own_bits_on() => {
+                     super::own_bits::find(p, x.st, std::env::var_os("VICTORY_WAVE_WHY").is_some())
+@@ -1815,7 +1898,7 @@ impl<'a> Lower<'a> {
+     /// this host wave's.
+     fn shape(&mut self, shape: super::wave::Shape, own: bool) -> Result<V, Why> {
+         use super::wave::{Op, Shape};
+-        let (op, src, mask, ident, prefix) = match shape {
++        let (mut op, src, mask, ident, prefix) = match shape {
+             Shape::K(k) => return Ok(self.s.m.i32(k)),
+             Shape::Value(v) => return self.i32_of(v),
+             Shape::Active(op, src, mask, ident) => (op, src, mask, ident, None),
+@@ -1861,7 +1944,32 @@ impl<'a> Lower<'a> {
+             .get(&mask)
+             .ok_or("a wave reduction's untracked mask")?;
+         let on = self.boolean(m, c)?;
+-        let x = self.i32_of(src)?;
++        let mut x = self.i32_of(src)?;
++        // A sum of doubles (`super::wave::Op::AddD`): taken where every term is the same
++        // power of two (`mask ? d : 0.0` per lane, a lane count in doubles), as the count
++        // of the lanes in the mask times `d`, exact: its low dword is 0 (a count of at most
++        // 64 lanes times a power of two fills only the high dword's mantissa), its high
++        // dword is built from the count below. Other terms: refused.
++        let mut double_hi: Option<u32> = None;
++        if matches!(op, Op::AddD | Op::AddDHi) {
++            if prefix.is_some() {
++                return Err("a wave prefix of doubles");
++            }
++            let k = self.s.m.known_i32(x).ok_or("a wave sum of doubles whose terms are not a constant")?;
++            if op == Op::AddD {
++                if k != 0 {
++                    return Err("a wave sum of doubles whose terms have low bits");
++                }
++                return Ok(self.s.m.i32(0));
++            }
++            let e = k >> 20 & 0x7FF;
++            if k & 0xF_FFFF != 0 || e == 0 || e >= 0x7F0 {
++                return Err("a wave sum of doubles of other than a power of two");
++            }
++            double_hi = Some(k);
++            x = self.s.m.i32(1);
++            op = Op::AddU;
++        }
+         let id = self.s.m.i32(ident);
+         let x = self.s.m.select(c, on, x, id);
+         self.s.flags |= flags::WAVE_OPS;
+@@ -1984,6 +2092,34 @@ impl<'a> Lower<'a> {
+         } else {
+             r
+         };
++        if let Some(k) = double_hi {
++            // `r` lanes counted: the high dword of the double r * d (d = 2^p, its high
++            // dword `k`): r = 2^e + rest has exponent p + e and mantissa rest << (20 - e).
++            let c = self.cur;
++            let n = r;
++            let one = self.s.m.i32(1);
++            let mut e = self.s.m.i32(0);
++            for t in 1..=10u32 {
++                let at = self.s.m.i32(1 << t);
++                let ge = self.s.m.cmp(c, pred::IUGE, n, at);
++                let ge = self.s.m.cast(c, Cast::ZExt, ge, self.s.t.i32);
++                e = self.s.m.bin(c, Bin::Add, e, ge);
++            }
++            let exp = self.s.m.i32(k & 0x7FF0_0000);
++            let k20 = self.s.m.i32(20);
++            let eb = self.s.m.bin(c, Bin::Shl, e, k20);
++            let exp = self.s.m.bin(c, Bin::Add, exp, eb);
++            let sh = self.s.m.bin(c, Bin::Sub, k20, e);
++            let mant = self.s.m.bin(c, Bin::Shl, n, sh);
++            let low20 = self.s.m.i32(0xF_FFFF);
++            let mant = self.s.m.bin(c, Bin::And, mant, low20);
++            let sign = self.s.m.i32(k & 0x8000_0000);
++            let hi = self.s.m.bin(c, Bin::Or, exp, mant);
++            let hi = self.s.m.bin(c, Bin::Or, hi, sign);
++            let z = self.s.m.i32(0);
++            let none = self.s.m.cmp(c, pred::IULT, n, one);
++            return Ok(self.s.m.select(c, none, z, hi));
++        }
+         Ok(if float { self.as_int(r) } else { r })
+     }
+ 
+@@ -4269,11 +4405,39 @@ impl<'a> Lower<'a> {
+         )
+     }
+ 
++    /// Whether a quad-local read must reach helper lanes: in a pixel program
++    /// every quad a triangle edge crosses has some (the console's whole-quad
++    /// mode runs them; discarded pixels stay helpers too), and only quad
++    /// reads see them on the host (wave reads leave them out: wrong
++    /// derivatives of computed values along every triangle edge, which thin
++    /// geometry such as hair is made of). Ported from VIctory upstream 4015a18
++    /// ("Shaders: quad reads in pixel programs reach the helpers at triangle
++    /// edges").
++    fn helpers_read(&self, quad: bool) -> bool {
++        quad && self.s.pixel
++    }
++
+     /// `x` of lane `src` (in this lane's quad) through quad reads, whose
+     /// lane must be a constant.
+-    fn quad_pick(&mut self, x: V, src: V) -> V {
++    /// `pattern`: the quad permutation's control byte when the read is one (DPP
++    /// `quad_perm`, `ds_swizzle` with bit 15): a broadcast or a swap in the quad is one
++    /// native quad operation (from DexNom/VIctory 921d8d3).
++    fn quad_pick(&mut self, x: V, src: V, pattern: Option<u8>) -> V {
+         self.s.flags |= flags::WAVE_OPS;
+         let c = self.cur;
++        match pattern {
++            Some(0xe4) => return x,
++            Some(p @ (0x00 | 0x55 | 0xaa | 0xff)) => {
++                let lane = self.s.m.i32(u32::from(p & 3));
++                return self.s.op(c, "quadReadLaneAt.i32", Attr::NoUnwind, self.s.t.i32, 122, &[x, lane]);
++            }
++            Some(p @ (0xb1 | 0x4e | 0x1b)) => {
++                // The low two bits select lane 0's partner: XOR 1, 2 or 3.
++                let direction = self.s.m.i8((p & 3) - 1);
++                return self.s.op(c, "quadOp.i32", Attr::NoUnwind, self.s.t.i32, 123, &[x, direction]);
++            }
++            _ => {}
++        }
+         let three = self.s.m.i32(3);
+         let q = self.s.m.bin(c, Bin::And, src, three);
+         let mut r = x;
+@@ -4386,9 +4550,11 @@ impl<'a> Lower<'a> {
+             let quad = offset & 0x8000 != 0
+                 || offset & 0x1C == 0x1C && offset & 0x380 == 0 && offset >> 10 & 0x1F < 4;
+             // Mesh: host quads are threads 4n..4n+3 of a 1D group, as the
+-            // console's, so quad-local swizzles read through quad operations.
++            // console's, so quad-local swizzles read through quad operations; pixel
++            // programs too, which reach the helper lanes at triangle edges that way.
+             let mesh_quad = self.s.mesh.is_some() && quad;
+-            if !mesh_quad {
++            let use_quad = mesh_quad || self.helpers_read(quad);
++            if !use_quad {
+                 self.cross_lane(quad)?;
+             }
+             // The source sits in the address field.
+@@ -4413,8 +4579,8 @@ impl<'a> Lower<'a> {
+                 let t = self.s.m.bin(c, Bin::Or, t, or);
+                 self.s.m.bin(c, Bin::Xor, t, xor)
+             };
+-            let r = if mesh_quad {
+-                self.quad_pick(x, src)
++            let r = if use_quad {
++                self.quad_pick(x, src, (offset & 0x8000 != 0).then_some(offset as u8))
+             } else {
+                 self.read_lane(x, src)
+             };
+@@ -6644,10 +6810,16 @@ impl<'a> Lower<'a> {
+             return Err("a DPP operand");
+         };
+         let x = self.i32_of(inst.read(Reg::V(reg)).ok_or("a DPP operand")?)?;
+-        // Quad permutations and DPP8 stay in groups the pixel layout shares.
+-        let quad = matches!(dpp, Dpp::Row { ctrl: 0..=0xFF, .. });
++        // Quad permutations and DPP8 stay in groups the pixel layout shares. DPP8 holds two
++        // quads: a quad read does it when every lane picks a lane of its own quad (from
++        // DexNom/VIctory 921d8d3).
++        let quad = match dpp {
++            Dpp::Row { ctrl, .. } => ctrl <= 0xFF,
++            Dpp::Lanes { sel, .. } => (0..8).all(|i| ((sel >> (3 * i)) ^ i) & 4 == 0),
++        };
+         let mesh_quad = self.s.mesh.is_some() && quad;
+-        if !mesh_quad {
++        let use_quad = mesh_quad || self.helpers_read(quad);
++        if !use_quad {
+             self.cross_lane(quad)?;
+         }
+         let c = self.cur;
+@@ -6725,8 +6897,12 @@ impl<'a> Lower<'a> {
+                 (src, inside, masks, bound_ctrl)
+             }
+         };
+-        let mut r = if mesh_quad {
+-            self.quad_pick(x, src)
++        let mut r = if use_quad {
++            let pattern = match dpp {
++                Dpp::Row { ctrl, .. } => Some(ctrl as u8),
++                Dpp::Lanes { .. } => None,
++            };
++            self.quad_pick(x, src, pattern)
+         } else {
+             self.read_lane(x, src)
+         };
+@@ -6808,6 +6984,68 @@ impl<'a> Lower<'a> {
+                 }
+                 Ok(())
+             }
++            "v_cvt_f32_f64" if v.abs == 0 && v.neg == 0 && !v.clamp && v.omod == 0 => {
++                // A double (two dwords) to the nearest float, ties to even,
++                // in integer operations (the DXIL here has no double type):
++                // the exponent rebiased (1023 -> 127), the top 23 bits of the
++                // 52-bit mantissa rounded by the 29 below; a carry out of the
++                // mantissa moves into the exponent, up to infinity. Infinity
++                // and NaN stay (a NaN quiet); too large is infinity.
++                // shortcut: a double below the smallest normal float gives a
++                // signed zero (the title's doubles here are lane counts).
++                // (a water volumetrics compute program converts a
++                // wave sum of 1.0 per lane taken in doubles.)
++                let x = self.src64(inst, 0)?;
++                let (lo, hi) = self.split64(x);
++                let k = |l: &mut Self, v: u32| l.s.m.i32(v);
++                let sign_bit = k(self, 0x8000_0000);
++                let sign = self.s.m.bin(c, Bin::And, hi, sign_bit);
++                let (k20, k7ff, kfffff) = (k(self, 20), k(self, 0x7FF), k(self, 0xF_FFFF));
++                let e = self.s.m.bin(c, Bin::LShr, hi, k20);
++                let e = self.s.m.bin(c, Bin::And, e, k7ff);
++                let mh = self.s.m.bin(c, Bin::And, hi, kfffff);
++                // Top 23 mantissa bits, and the 29 below them.
++                let (k3, k29) = (k(self, 3), k(self, 29));
++                let top = self.s.m.bin(c, Bin::Shl, mh, k3);
++                let lo_top = self.s.m.bin(c, Bin::LShr, lo, k29);
++                let m23 = self.s.m.bin(c, Bin::Or, top, lo_top);
++                let rmask = k(self, 0x1FFF_FFFF);
++                let rest = self.s.m.bin(c, Bin::And, lo, rmask);
++                let half = k(self, 0x1000_0000);
++                let above = self.s.m.cmp(c, pred::IUGT, rest, half);
++                let tie = self.s.m.cmp(c, pred::EQ, rest, half);
++                let one = k(self, 1);
++                let odd = self.s.m.bin(c, Bin::And, m23, one);
++                let zero = k(self, 0);
++                let odd = self.s.m.cmp(c, pred::NE, odd, zero);
++                let tie_up = self.s.m.bin(c, Bin::And, tie, odd);
++                let up = self.s.m.bin(c, Bin::Or, above, tie_up);
++                let up = self.s.m.cast(c, Cast::ZExt, up, self.s.t.i32);
++                // Float exponent, as a signed number.
++                let bias = k(self, 1023 - 127);
++                let fe = self.s.m.bin(c, Bin::Sub, e, bias);
++                let k23 = k(self, 23);
++                let bits = self.s.m.bin(c, Bin::Shl, fe, k23);
++                let bits = self.s.m.bin(c, Bin::Or, bits, m23);
++                let bits = self.s.m.bin(c, Bin::Add, bits, up);
++                let inf = k(self, 0x7F80_0000);
++                let z = k(self, 0);
++                // Out of range: below a normal float (zero), above (infinity).
++                let low = self.s.m.cmp(c, pred::SLE, fe, z);
++                let k255 = k(self, 255);
++                let high = self.s.m.cmp(c, pred::SGE, fe, k255);
++                let bits = self.s.m.select(c, low, z, bits);
++                let bits = self.s.m.select(c, high, inf, bits);
++                // Infinity and NaN.
++                let special = self.s.m.cmp(c, pred::EQ, e, k7ff);
++                let mant_lo = self.s.m.bin(c, Bin::Or, mh, lo);
++                let nan = self.s.m.cmp(c, pred::NE, mant_lo, z);
++                let qnan = k(self, 0x7FC0_0000);
++                let spec = self.s.m.select(c, nan, qnan, inf);
++                let bits = self.s.m.select(c, special, spec, bits);
++                let r = self.s.m.bin(c, Bin::Or, bits, sign);
++                int(self, r)
++            }
+             "v_lshlrev_b64" | "v_lshrrev_b64" | "v_ashrrev_i64" => {
+                 let n = s(self, 0)?;
+                 let x = self.src64(inst, 1)?;
+@@ -7334,8 +7572,20 @@ impl<'a> Lower<'a> {
+                 let Some(Operand::Vector { reg, .. }) = v.dst else {
+                     return Err("a mixed-precision result");
+                 };
++                // The half kept may be what a paired first half of an
++                // interpolation left there (`v_interp_p1ll_f16 v8`, its
++                // second half into another register, then
++                // `v_fma_mixlo_f16 v8`): the high bits of an intermediate
++                // nothing reads, which is not computed on its own. Zero, as
++                // `low_half` takes it; any other missing value still fails.
++                // (8 deferred-lighting pixel programs of the title,
++                // deferred material programs among them, were refused for it.)
+                 let old = match inst.read(Reg::V(reg)) {
+-                    Some(o) => self.i32_of(o)?,
++                    Some(o) => match self.i32_of(o) {
++                        Ok(o) => o,
++                        Err(FIRST_HALF) => self.s.m.i32(0),
++                        Err(why) => return Err(why),
++                    },
+                     None => self.s.m.i32(0),
+                 };
+                 let h = self
+@@ -7484,6 +7734,66 @@ impl<'a> Lower<'a> {
+                 }
+                 Ok(())
+             }
++            "v_permlanex16_b32" | "v_permlane16_b32" => {
++                // Lane l reads src0 of a lane of its own 32-lane half:
++                // permlanex16 the other row of 16 (l ^ 16), permlane16 its
++                // own row; which lane of that row is nibble (l & 15) of the
++                // 64-bit selector {src2, src1}. fi:1 (opsel bit 0) reads
++                // inactive lanes too; otherwise an inactive source gives 0
++                // with bound_ctrl:1 (opsel bit 1) and leaves the lane's old
++                // value with bound_ctrl:0 (RDNA ISA, VOP3 permlane). Outside
++                // whole-wave sections (those are in `wave`). The source never
++                // leaves the 32-lane half, so a console wave of 64 run as
++                // host waves of 32 finds it in its own host wave.
++                // (Ported from ProjectReCity's VIctory branch, where a
++                // hardware test checks both bound_ctrl forms.)
++                let x = s(self, 0)?;
++                let (s1, s2) = (s(self, 1)?, s(self, 2)?);
++                self.cross_lane(false)?;
++                let me = self.lane_index();
++                let k = |l: &mut Self, v: u32| l.s.m.i32(v);
++                let (k15, k16, k7, k8, k2) = (k(self, 15), k(self, 16), k(self, 7), k(self, 8), k(self, 2));
++                let row = self.s.m.bin(c, Bin::And, me, k15);
++                // The nibble: of src1 for positions 0..7, of src2 for 8..15.
++                let high = self.s.m.cmp(c, pred::IUGE, row, k8);
++                let word = self.s.m.select(c, high, s2, s1);
++                let at = self.s.m.bin(c, Bin::And, row, k7);
++                let sh = self.s.m.bin(c, Bin::Shl, at, k2);
++                let pick = self.s.m.bin(c, Bin::LShr, word, sh);
++                let pick = self.s.m.bin(c, Bin::And, pick, k15);
++                let not15 = k(self, !15);
++                let base = self.s.m.bin(c, Bin::And, me, not15);
++                let base = if name == "v_permlanex16_b32" {
++                    self.s.m.bin(c, Bin::Xor, base, k16)
++                } else {
++                    base
++                };
++                let lane = self.s.m.bin(c, Bin::Or, base, pick);
++                if v.opsel & 1 != 0 || guard.is_none() {
++                    let r = self.read_lane(x, lane);
++                    return int(self, r);
++                }
++                // Whether the source lane runs, read from it like the value.
++                let g = guard.ok_or("a guard")?;
++                let (one, z) = (k(self, 1), k(self, 0));
++                let on = self.s.m.select(c, g, one, z);
++                let r = self.read_lane(x, lane);
++                let ran = self.read_lane(on, lane);
++                let ran = self.s.m.cmp(c, pred::NE, ran, z);
++                let other = if v.opsel & 2 != 0 {
++                    z
++                } else {
++                    match v.dst.and_then(|d| match d {
++                        Operand::Vector { reg, .. } => inst.read(Reg::V(reg)),
++                        _ => None,
++                    }) {
++                        Some(o) => self.i32_of(o)?,
++                        None => z,
++                    }
++                };
++                let r = self.s.m.select(c, ran, r, other);
++                int(self, r)
++            }
+             "v_readlane_b32" => {
+                 let (a, lane) = (s(self, 0)?, s(self, 1)?);
+                 // A computed lane in a pixel or vertex program is a host lane
+@@ -7577,7 +7887,8 @@ impl<'a> Lower<'a> {
+                 // one, unless every lane holds the same value
+                 let alike = match v.src.first() {
+                     Some(&Operand::Vector { reg, .. }) => {
+-                        inst.read(Reg::V(reg)).is_some_and(|x| self.uniform.contains(&x))
++                        inst.read(Reg::V(reg))
++                            .is_some_and(|x| self.uniform.contains(&x) || self.active_uniform.contains(&x))
+                     }
+                     _ => true,
+                 };
+@@ -9891,11 +10202,13 @@ impl<'a> Lower<'a> {
+                     let width = self.s.m.extract(c, d, 0);
+                     let width = self.s.m.cast(c, Cast::UiToFp, width, self.s.t.f32);
+                     let texels = self.s.m.bin(c, Bin::Mul, longer, width);
+-                    // log2 = natural logarithm / ln 2; a length of 0 gives
+-                    // minus infinity, which the sampler clamps to level 0.
+-                    let ln = self.unary(23, texels);
+-                    let per_ln2 = self.s.m.f32(std::f32::consts::LOG2_E.to_bits());
+-                    let lod = self.s.m.bin(c, Bin::Mul, ln, per_ln2);
++                    // DXIL Log already returns log2 (it was multiplied by 1/ln 2 once
++                    // more: a level 1.44 times too coarse). A footprint of zero gives
++                    // -infinity and the sampler takes its finest mip. SampleLevel has no
++                    // clamp operand: the instruction's minimum level is applied here.
++                    // (From DexNom/VIctory 921d8d3, "Repair pixel quad sampling".)
++                    let lod = self.unary(23, texels);
++                    let lod = if has_cl { self.binary(35, lod, clamp) } else { lod };
+                     args.extend(&os);
+                     args.push(lod);
+                     self.s.op(
+diff --git a/crates/victory-shader/src/emit/mod.rs b/crates/victory-shader/src/emit/mod.rs
+index 5217df8..624ee52 100644
+--- a/crates/victory-shader/src/emit/mod.rs
++++ b/crates/victory-shader/src/emit/mod.rs
+@@ -340,6 +340,21 @@ fn translate_plain(container: &[u8]) -> Result<HostShader, ShaderError> {
+     emit(&c, &native, &p, &st, &io, &res)
+ }
+ 
++thread_local! {
++    /// [`with_wide`]: the wave-wide form allowed for the translation under way.
++    static WIDE_FORCED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
++}
++
++/// Runs `f` (a translation) with the wave-wide form of console wave64 programs allowed, as
++/// `VICTORY_WAVE_WIDE=1` allows it for all: for a caller that picks the programs it is known
++/// to be safe for (diagnostics, `VICTORY_WAVE_WIDE_ONLY` in the GPU layer).
++pub fn with_wide<T>(f: impl FnOnce() -> T) -> T {
++    let was = WIDE_FORCED.replace(true);
++    let r = f();
++    WIDE_FORCED.set(was);
++    r
++}
++
+ /// Emits a program whose earlier stages already ran.
+ pub fn emit(
+     c: &Container,
+@@ -420,9 +435,9 @@ pub fn emit(
+         // Off unless asked for (`VICTORY_WAVE_WIDE=1`), for a console wave run as two host
+         // waves: this form puts group barriers inside branches and loops, and runs 121-124
+         // lost the card in a submission of two programs that had just moved to it
+-        // (`ptfx_CS_lightAtlas_Sprite` and `_Trail`). The 32-lane programs' form below, which
++        // (two particle light-atlas programs). The 32-lane programs' form below, which
+         // has no barrier, stays on.
+-        let wide_on = std::env::var_os("VICTORY_WAVE_WIDE").is_some_and(|v| v == "1");
++        let wide_on = std::env::var_os("VICTORY_WAVE_WIDE").is_some_and(|v| v == "1") || WIDE_FORCED.get();
+         // exact first: each host wave on its own where that is exact (the idiom, every
+         // form; no barriers), then the other exact forms; then approximate
+         for exact in [true, false] {
+@@ -582,8 +597,36 @@ fn widen(
+                 if lower::needs_every_lane(what) || *what == lower::LANE_MASK && !needs.is_empty())
+             || matches!(&r, Ok((_, Some(64)))) && !needs.is_empty();
+         if !stuck {
++            // A branch taken wave-wide inside a loop: its group barriers run once per
++            // iteration, and the two host waves of the group must agree on every one. The
++            // particle light atlases (two particle light-atlas programs, two of their three
++            // widened branches in a loop) hung the card that way (runs 121-124 of the fork's
++            // author, and z43 here: a submission ran 4.8 s and the device was removed); every
++            // program widened without a branch in a loop ran (z44: the screen-space tiling and the
++            // particle visibility). So such a form is refused, the program kept as it was.
++            let in_cycle = |b: usize| {
++                let mut seen = vec![false; p.blocks.len()];
++                let mut stack = p.blocks[b].exit.successors();
++                while let Some(x) = stack.pop() {
++                    if x == b {
++                        return true;
++                    }
++                    if x < seen.len() && !seen[x] {
++                        seen[x] = true;
++                        stack.extend(p.blocks[x].exit.successors());
++                    }
++                }
++                false
++            };
++            let looped = wide.iter().filter(|&&b| in_cycle(b)).count();
+             if why {
+-                eprintln!("WAVE64-WIDE {} branches taken wave-wide", wide.len());
++                eprintln!("WAVE64-WIDE {} branches taken wave-wide, {looped} of them in a loop", wide.len());
++            }
++            if looped > 0 && matches!(&r, Ok(_)) {
++                return Err(ShaderError::Unsupported {
++                    offset: 0,
++                    what: "a branch taken wave-wide inside a loop",
++                });
+             }
+             return r;
+         }
+diff --git a/crates/victory-shader/src/emit/wave.rs b/crates/victory-shader/src/emit/wave.rs
+index 1d7a91b..ed3953f 100644
+--- a/crates/victory-shader/src/emit/wave.rs
++++ b/crates/victory-shader/src/emit/wave.rs
+@@ -34,6 +34,11 @@ pub(crate) enum Op {
+     Or,
+     And,
+     Xor,
++    /// A sum of doubles (`v_add_f64`): the low dword of the sum, whose terms' low dwords
++    /// are `src`.
++    AddD,
++    /// The same sum's high dword, whose terms' high dwords are `src`.
++    AddDHi,
+ }
+ 
+ impl Op {
+@@ -60,7 +65,7 @@ impl Op {
+     /// Whether `k` leaves the other operand unchanged.
+     fn identity(self, k: u32) -> bool {
+         match self {
+-            Op::AddU | Op::AddH | Op::Or | Op::Xor | Op::MaxU => k == 0,
++            Op::AddU | Op::AddH | Op::Or | Op::Xor | Op::MaxU | Op::AddD | Op::AddDHi => k == 0,
+             Op::AddF => k == 0 || k == 0x8000_0000,
+             Op::MinU | Op::And => k == u32::MAX,
+             Op::MinI => k == 0x7FFF_FFFF,
+@@ -72,7 +77,36 @@ impl Op {
+ 
+     /// Counting a lane twice changes the result.
+     fn counts(self) -> bool {
+-        matches!(self, Op::AddU | Op::AddF | Op::AddH | Op::Xor)
++        matches!(self, Op::AddU | Op::AddF | Op::AddH | Op::Xor | Op::AddD | Op::AddDHi)
++    }
++}
++
++/// The two dwords of the sum of two doubles of a section (low, high): `+0.0` (`K(0)`
++/// twice) leaves the other; two partial sums of the same terms (`mask ? {lo, hi} : 0.0`)
++/// over disjoint lanes join; anything else is not followed.
++fn add_doubles(a: (Sym, Sym), b: (Sym, Sym)) -> (Sym, Sym) {
++    let zero = (Sym::K(0), Sym::K(0));
++    if a == zero {
++        return b;
++    }
++    if b == zero {
++        return a;
++    }
++    let parts = |p: (Sym, Sym)| match p {
++        (
++            Sym::Red { op: ol, src: sl, mask: ml, ident: 0, lanes: ll },
++            Sym::Red { op: oh, src: sh, mask: mh, ident: 0, lanes: lh },
++        ) if ol.is_none_or(|o| o == Op::AddD) && oh.is_none_or(|o| o == Op::AddDHi) && ml == mh && ll == lh => {
++            Some((sl, sh, ml, ll))
++        }
++        _ => None,
++    };
++    match (parts(a), parts(b)) {
++        (Some((sl, sh, m, la)), Some((sl2, sh2, m2, lb))) if (sl, sh, m) == (sl2, sh2, m2) && la & lb == 0 => (
++            Sym::Red { op: Some(Op::AddD), src: sl, mask: m, ident: 0, lanes: la | lb },
++            Sym::Red { op: Some(Op::AddDHi), src: sh, mask: m, ident: 0, lanes: la | lb },
++        ),
++        _ => (Sym::Unknown, Sym::Unknown),
+     }
+ }
+ 
+diff --git a/crates/victory-shader/src/emit/wave64_tests.rs b/crates/victory-shader/src/emit/wave64_tests.rs
+index 55cc55d..02e7f7d 100644
+--- a/crates/victory-shader/src/emit/wave64_tests.rs
++++ b/crates/victory-shader/src/emit/wave64_tests.rs
+@@ -530,3 +530,287 @@ fn scc_of_a_mask_operation_joined_with_a_scalar_test_needs_the_skip_wave_wide()
+     }
+     eprintln!("ran on the hardware device: the inner test's SCC for every lane once some lane is inside");
+ }
++
++/// `v_permlanex16_b32` outside a whole-wave section (the title's upscaler and
++/// a water optical-depth compute program), on a
++/// 32-lane console wave: lanes below 24 run it; lane l reads v2 = 1000 +
++/// lane of lane ((l & 16) ^ 16) | nibble (l & 15) of {s7, s6}. A source lane
++/// left out gives the old v3 (0xdead), or 0 with bound_ctrl:1 (RDNA ISA).
++/// Every lane stores its v3. (Ported from ProjectReCity's VIctory branch.)
++#[test]
++fn permlanex16_reads_the_other_row_by_its_selector() {
++    const S6: u32 = 0x9E3B_1F05;
++    const S7: u32 = 0x4C8D_02A7;
++    let _one = super::valu_tests::ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
++    for bound_ctrl in [false, true] {
++        let words = [
++            0xBE86_03FF,
++            S6, // s_mov_b32 s6, S6
++            0xBE87_03FF,
++            S7, // s_mov_b32 s7, S7
++            0x4A04_00FF,
++            0x0000_03E8, // v_add_nc_u32 v2, 1000, v0
++            0x7E06_02FF,
++            0x0000_DEAD, // v_mov_b32 v3, 0xdead
++            0x3414_0082, // v_lshlrev_b32 v10, 2, v0
++            0x7D88_0098, // v_cmp_gt_u32 vcc_lo, 24, v0
++            0xBE94_3C6A, // s_and_saveexec_b32 s20, vcc_lo
++            // v_permlanex16_b32 v3, v2, s6, s7 [bound_ctrl:1]
++            0xD778_0003 | u32::from(bound_ctrl) << 12,
++            0x001C_0D02,
++            0xBEFE_0314, // s_mov_b32 exec_lo, s20
++            0xBF8C_C07F, // s_waitcnt lgkmcnt(0)
++            0xE070_1000,
++            0x8002_030A, // buffer_store_dword v3, v10, s[8:11], 0 offen
++        ];
++        let native = native_of(&words, false, 32);
++        let p = ir::build(&native.code, native.wave64, native.vgprs).expect("ir::build");
++        let shader = lowered(&native, &p, &HashSet::new()).expect("lower");
++        if let Ok(mut v) = validator::Validator::load(validator::Validator::default_path().as_deref()) {
++            let mut copy = shader.dxil.clone();
++            v.validate(&mut copy).expect("DXIL validation failed");
++        }
++        let sel = u64::from(S6) | u64::from(S7) << 32;
++        let want: Vec<u32> = (0..32u32)
++            .map(|l| {
++                let src = ((l & 16) ^ 16) | (sel >> (4 * (l & 15)) & 15) as u32;
++                match src {
++                    _ if l >= 24 => 0xDEAD,
++                    src if src < 24 => 1000 + src,
++                    _ if bound_ctrl => 0,
++                    _ => 0xDEAD,
++                }
++            })
++            .collect();
++        let Ok(host) = Host::new(false) else {
++            eprintln!("no SM 6.6 hardware device; not run");
++            return;
++        };
++        let Ok((root, pso)) = host.compute_pipeline(&shader) else {
++            eprintln!("the hardware device does not take this program; not run");
++            return;
++        };
++        let ud = vec![0u32; shader.user_data_dwords().max(1) as usize];
++        let out = host
++            .dispatch(
++                &root,
++                &pso,
++                &Dispatch {
++                    roots: vec![(0, Root::Constants(ud))],
++                    views: &[View::RawUav(32)],
++                    samplers: &[],
++                    groups: [1, 1, 1],
++                },
++            )
++            .unwrap_or_else(|e| panic!("dispatch failed: {e}"));
++        assert_eq!(out[0], want, "bound_ctrl {bound_ctrl}");
++        eprintln!("ran on the hardware device: bound_ctrl {bound_ctrl}");
++    }
++}
++
++/// `v_cvt_f32_f64` (the title's wave sums taken in doubles,
++/// a water volumetrics compute program): a double from two root
++/// constants to the nearest float, against Rust's own `as f32` (ties to
++/// even, overflow to infinity). (Ported from ProjectReCity's branch.)
++#[test]
++fn a_double_converts_to_the_nearest_float() {
++    let words = [
++        0x7E00_1E00, // v_cvt_f32_f64 v0, s[0:1]
++        0xBF8C_C07F, // s_waitcnt lgkmcnt(0)
++        0x38 << 26 | 0x1C << 18,
++        0x80 << 24 | 2 << 16, // buffer_store_dword v0, off, s[8:11], 0
++    ];
++    let native = native_of(&words, false, 32);
++    let p = ir::build(&native.code, native.wave64, native.vgprs).expect("ir::build");
++    let shader = lowered(&native, &p, &HashSet::new()).expect("lower");
++    if let Ok(mut v) = validator::Validator::load(validator::Validator::default_path().as_deref()) {
++        let mut copy = shader.dxil.clone();
++        v.validate(&mut copy).expect("DXIL validation failed");
++    }
++    let _one = super::valu_tests::ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
++    let cases = [
++        1.0f64,
++        64.0,
++        -3.5,
++        0.1,
++        1.0 + f64::powi(2.0, -24),     // a tie: stays at 1.0 (even)
++        1.0 + 3.0 * f64::powi(2.0, -24), // a tie: up to 1 + 2^-22
++        3.402_823_5e38,
++        1e39,
++        f64::INFINITY,
++        -f64::INFINITY,
++        123_456.789_012_345,
++        f64::NAN,
++    ];
++    for x in cases {
++        let bits = x.to_bits();
++        let Some(got) = on_the_card(&shader, [bits as u32, (bits >> 32) as u32]) else { return };
++        let want = x as f32;
++        if want.is_nan() {
++            assert!(f32::from_bits(got).is_nan(), "{x}: got {got:#x}");
++        } else {
++            assert_eq!(got, want.to_bits(), "{x}: got {}", f32::from_bits(got));
++        }
++    }
++    eprintln!("ran on the hardware device: {} doubles", cases.len());
++}
++
++/// A lane count taken in doubles inside a whole-wave section, as
++/// a water volumetrics compute program counts its lanes: the lanes below s0
++/// hold 1.0 (high dword 0x3ff00000), summed with `v_add_f64` over DPP8 neighbours,
++/// `row_mirror` and `v_permlanex16`, read from lane 0 and converted to a float. A 32-lane
++/// console wave; every lane stores the float to dword 0. (Ported from ProjectReCity's
++/// branch.)
++#[test]
++fn a_lane_count_in_doubles_is_the_count() {
++    let pair = |w0: u32, w1: u32| [w0, w1];
++    let mut words = vec![
++        0x7E10_0280, // v_mov_b32 v8, 0
++        0x7E12_02FF,
++        0x3FF0_0000, // v_mov_b32 v9, 0x3ff00000 (1.0's high dword)
++        0x7D88_0000, // v_cmp_gt_u32 vcc_lo, s0, v0
++        0xBE94_036A, // s_mov_b32 s20, vcc_lo
++        0xBE90_3DC1, // s_or_saveexec_b32 s16, -1
++        0x7E04_0280, // v_mov_b32 v2, 0
++        0x7E06_0280, // v_mov_b32 v3, 0
++        0x870E_1014, // s_and_b32 s14, s20, s16
++        0xD501_0002,
++        0x003A_1102, // v_cndmask_b32 v2, v2, v8, s14
++        0xD501_0003,
++        0x003A_1303, // v_cndmask_b32 v3, v3, v9, s14
++    ];
++    for (lo, hi) in [
++        (0xDE54_C102, 0xDE54_C103), // dpp8:[1,0,3,2,5,4,7,6]
++        (0x9360_1202, 0x9360_1203), // dpp8:[2,2,0,0,6,6,4,4]
++        (0x0009_2402, 0x0009_2403), // dpp8:[4,4,4,4,0,0,0,0]
++    ] {
++        words.extend(pair(0x7E08_02E9, lo)); // v_mov_b32 v4, v2 dpp8
++        words.extend(pair(0x7E0A_02E9, hi)); // v_mov_b32 v5, v3 dpp8
++        words.extend(pair(0xD564_0002, 0x0002_0504)); // v_add_f64 v[2:3], v[4:5], v[2:3]
++    }
++    words.extend(pair(0x7E08_02FA, 0xFF09_4002)); // v_mov_b32 v4, v2 row_mirror bound_ctrl:1
++    words.extend(pair(0x7E0A_02FA, 0xFF09_4003)); // v_mov_b32 v5, v3 row_mirror bound_ctrl:1
++    words.extend(pair(0xD564_0002, 0x0002_0504)); // v_add_f64 v[2:3], v[4:5], v[2:3]
++    words.extend(pair(0xD778_0004, 0x0201_0102)); // v_permlanex16_b32 v4, v2, 0, 0
++    words.extend(pair(0xD778_0005, 0x0201_0103)); // v_permlanex16_b32 v5, v3, 0, 0
++    words.extend(pair(0xD564_0002, 0x0002_0504)); // v_add_f64 v[2:3], v[4:5], v[2:3]
++    words.extend(pair(0xD760_000C, 0x0001_0102)); // v_readlane_b32 s12, v2, 0
++    words.extend(pair(0xD760_000D, 0x0001_0103)); // v_readlane_b32 s13, v3, 0
++    words.extend([
++        0xBEFE_0310, // s_mov_b32 exec_lo, s16
++        0x7E14_1E0C, // v_cvt_f32_f64 v10, s[12:13]
++        0xBF8C_C07F, // s_waitcnt lgkmcnt(0)
++        0xE070_0000,
++        0x8002_0A00, // buffer_store_dword v10, off, s[8:11], 0
++    ]);
++    let native = native_of(&words, false, 32);
++    let p = ir::build(&native.code, native.wave64, native.vgprs).expect("ir::build");
++    let shader = lowered(&native, &p, &HashSet::new()).expect("lower");
++    if let Ok(mut v) = validator::Validator::load(validator::Validator::default_path().as_deref()) {
++        let mut copy = shader.dxil.clone();
++        v.validate(&mut copy).expect("DXIL validation failed");
++    }
++    let _one = super::valu_tests::ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
++    for below in [32u32, 10, 1, 0, 40] {
++        let Some(got) = on_the_card(&shader, [below, 0]) else { return };
++        let want = below.min(32) as f32;
++        assert_eq!(f32::from_bits(got), want, "{below} lanes below s0");
++    }
++    eprintln!("ran on the hardware device: lane counts in doubles");
++}
++
++/// The structure builder's sum of the totals of the waves before this one
++/// (`XboxBvhBuilder`, `v_readfirstlane` at 0x1d4), with 64-lane console waves on 32-lane host
++/// waves that exchange: each wave's lane 0 writes (wave + 1) to LDS; after a barrier, the lanes
++/// of wave w loop over the slots below w, carrying the running sum and reading it back with
++/// `v_readfirstlane` at the top of each round, where only the looping lanes run. Every lane in
++/// the loop holds the same sum, so the host wave's first lane answers for the console wave's.
++/// A `v_readlane` of lane 31 where every lane runs makes the halves exchange. Four console
++/// waves in a group of 256: sums 0, 1, 3, 6; lane 31's thread id 64 w + 31.
++#[test]
++fn a_first_lane_read_of_a_sum_every_looping_lane_holds() {
++    let words = [
++        0x2C0E_0086, // v_lshrrev_b32 v7, 6, v0
++        0xD760_0014,
++        0x0001_3F00, // v_readlane_b32 s20, v0, 31
++        0x3612_00BF, // v_and_b32 v9, 63, v0
++        0x4A14_0E81, // v_add_nc_u32 v10, 1, v7
++        0x3416_0E82, // v_lshlrev_b32 v11, 2, v7
++        0xBE80_047E, // s_mov_b64 s[0:1], exec
++        0x7DA4_1280, // v_cmpx_eq_u32 exec, 0, v9
++        0xD834_0000,
++        0x0000_0A0B, // ds_write_b32 v11, v10
++        0xBEFE_0400, // s_mov_b64 exec, s[0:1]
++        0xBF8C_C07F, // s_waitcnt lgkmcnt(0)
++        0xBF8A_0000, // s_barrier
++        0x7E10_0280, // v_mov_b32 v8, 0
++        0xBE80_047E, // s_mov_b64 s[0:1], exec
++        0x7DAA_0E80, // v_cmpx_ne_u32 exec, 0, v7
++        0xBF88_0011, // s_cbranch_execz END
++        0xBE86_047E, // s_mov_b64 s[6:7], exec
++        0xBE92_0380, // s_mov_b32 s18, 0
++        0xBE91_0380, // s_mov_b32 s17, 0
++        0xBF82_0002, // s_branch BODY
++        0x87FE_0610, // TOP: s_and_b64 exec, s[16:17], s[6:7]
++        0x7E22_0508, // v_readfirstlane_b32 s17, v8
++        0x8F10_8212, // BODY: s_lshl_b32 s16, s18, 2
++        0x8112_8112, // s_add_i32 s18, s18, 1
++        0x7E10_0210, // v_mov_b32 v8, s16
++        0xD8D8_0000,
++        0x0800_0008, // ds_read_b32 v8, v8
++        0xBF8C_C07F, // s_waitcnt lgkmcnt(0)
++        0x4A10_1011, // v_add_nc_u32 v8, s17, v8
++        0xBE90_047E, // s_mov_b64 s[16:17], exec
++        0x7DA4_0E12, // v_cmpx_eq_u32 exec, s18, v7
++        0x8A86_7E06, // s_andn2_b64 s[6:7], s[6:7], exec
++        0xBF85_FFF3, // s_cbranch_scc1 TOP
++        0xBEFE_0400, // END: s_mov_b64 exec, s[0:1]
++        0x3418_0082, // v_lshlrev_b32 v12, 2, v0
++        0x7E1C_0214, // v_mov_b32 v14, s20
++        0x4A1E_18FF,
++        0x0000_0400, // v_add_nc_u32 v15, 1024, v12
++        0xE070_1000,
++        0x8002_080C, // buffer_store_dword v8, v12, s[8:11], 0 offen
++        0xE070_1000,
++        0x8002_0E0F, // buffer_store_dword v14, v15, s[8:11], 0 offen
++    ];
++    let mut native = native_of(&words, true, 256);
++    // 512 bytes of LDS: the four waves' totals
++    native.io = StageIo::Cs(ComputeIo {
++        rsrc2: (5 << 1) | (1 << 15),
++        threads: [256, 1, 1],
++    });
++    let p = ir::build(&native.code, native.wave64, native.vgprs).expect("ir::build");
++    let shader = lowered(&native, &p, &HashSet::new()).expect("lower");
++    if let Ok(mut v) = validator::Validator::load(validator::Validator::default_path().as_deref()) {
++        let mut copy = shader.dxil.clone();
++        v.validate(&mut copy).expect("DXIL validation failed");
++    }
++    let _one = super::valu_tests::ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
++    let Ok(host) = Host::new(false) else {
++        eprintln!("no SM 6.6 hardware device; not run");
++        return;
++    };
++    let Ok((root, pso)) = host.compute_pipeline(&shader) else {
++        eprintln!("the hardware device does not take this program; not run");
++        return;
++    };
++    let ud = vec![0u32; shader.user_data_dwords().max(1) as usize];
++    let out = host
++        .dispatch(
++            &root,
++            &pso,
++            &Dispatch {
++                roots: vec![(0, Root::Constants(ud))],
++                views: &[View::RawUav(512)],
++                samplers: &[],
++                groups: [1, 1, 1],
++            },
++        )
++        .unwrap_or_else(|e| panic!("dispatch failed: {e}"));
++    let sums: Vec<u32> = (0..256u32).map(|t| [0, 1, 3, 6][(t >> 6) as usize]).collect();
++    let lane31: Vec<u32> = (0..256u32).map(|t| (t >> 6) * 64 + 31).collect();
++    assert_eq!(out[0][..256], sums[..], "sums of the waves before");
++    assert_eq!(out[0][256..512], lane31[..], "lane 31's thread id");
++    eprintln!("ran on the hardware device: the sums of the waves before, through v_readfirstlane");
++}
+diff --git a/crates/victory-shader/src/lib.rs b/crates/victory-shader/src/lib.rs
+index 30b1952..cbf24d2 100644
+--- a/crates/victory-shader/src/lib.rs
++++ b/crates/victory-shader/src/lib.rs
+@@ -6,6 +6,10 @@
+ //! (compiler options) and the zlib-compressed GFX10 code. The bitcode may use
+ //! console-only intrinsics, so the GFX10 code is translated in general.
+ 
++/// What the translator is built from (`build.rs`): keys caches of
++/// translations, so a build that changes only other crates keeps them.
++pub const SOURCE_HASH: &str = env!("VICTORY_SHADER_SOURCE_HASH");
++
+ pub mod bvh;
+ pub mod dxbc;
+ pub mod dxil;
