@@ -75,11 +75,42 @@ Translation of the whole shader pack (`victory translate --list --validate --pip
 
 Seen on screen: hair drawn in strands instead of blocks (quad reads), characters in colour, sky and haze right.
 
+## Where the frame goes, and levers tried (2026-11-25)
+
+Same machine, warm cache, frames of 3,000 draws or more after the first ten in the world, medians.
+
+| Run | Switches on top of `Launch.ps1` | fps | ms/frame | ms per 1,000 draws | GPU part | waits under shader writes |
+|---|---|---|---|---|---|---|
+| z50 | none | 5.2 | 193 | 39.5 | 67 ms | 58 ms |
+| z53 | `VICTORY_INPLACE=2` | 3.1 | 320 | 64.8 | 215 ms | 114 ms |
+| z54 | `VICTORY_CARD_WINDOWS_MB=1024` | stopped at 184 s by the memory guard (1.1 GB of commit left); while loading: GPU part 7-37 ms, copies 400-850 ms | | | | |
+| z55 | `VICTORY_COPY_PLAIN=1 VICTORY_MERGE_GAP=64 VICTORY_MERGE_RUNS=4096` | 4.8 | 207 | 42.7 | 4 ms | 0 ms |
+
+Run-to-run spread is large (a cold-cache run of the same build gave 53.4 ms per 1,000 draws), so z55 against z50
+is no gain and no loss.
+
+- **The critical path is the one thread that submits.** In z50 it spends 50-60 ms user and ~60 ms kernel time a
+  frame inside its 28 submissions, plus ~14 ms waiting for the submission lock; the kernel time is write-watch
+  queries (about 3,000 a frame over 8.6 GB, 8.5 GB of it unchanged, 32 ms) and page guards (26 ms). The title takes
+  ~50 ms from a present to its first list. In z55 the waits under shader writes are gone and the title's part
+  halves, but the submitting thread then works ~95 ms user + ~75 ms kernel + ~30 ms lock a frame: the work moved,
+  the frame did not get shorter.
+- **Title memory in place (`VICTORY_INPLACE=2`) is slower on this card**: the GPU part triples. Shadow copies of
+  small buffers are already in the PC's memory (`shared_buffer`, pool L0), so why it triples is not known. A census
+  (`VICTORY_INPLACE_PROBE=1`) found ~470 MB more that a committed page-pool section would cover; that level was
+  written and not run.
+- **Windows on the card (`VICTORY_CARD_WINDOWS_MB`)** shortens the GPU part a lot but multiplies the copies, and the
+  extra card copies ran an 8 GB card and 16 GB of RAM out of commit.
+- **What would move the frame**: less work per submission on that one thread (fewer or cheaper write-watch and
+  guard calls, or the work spread over more threads). Not done yet.
+
 ## Still wrong
 
 - **Horizontal stripes on lit clothing.** Render-target dumps put them in the normals target of the G-buffer
   (albedo and depth are clean), written by the deferred character material shaders, which use only
-  implicit-derivative sampling. Cause not found; a wrong vertical derivative is the leading hypothesis, unproven.
+  implicit-derivative sampling. Cause not found. Ruled out: derivatives taken under divergent control flow (in
+  the emitted DXIL of one of them, all 34 implicit-derivative operations sit in code every lane runs, with no
+  branch at all).
 - **Grainy courtyard** in some runs, not tied to a cause.
 - **`VICTORY_WAVE_WIDE_ONLY`**: the two compute programs it names (a reflection tiling pass and a particle
   visibility pass) now run instead of being refused, but a visual effect is not shown: the scene differs from run to
