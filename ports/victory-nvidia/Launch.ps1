@@ -12,9 +12,10 @@ foreach ($d in 'cache', 'data') { New-Item -ItemType Directory -Force (Join-Path
 foreach ($v in 'VICTORY_CAPTURE', 'VICTORY_CAPTURE_FRAMES', 'VICTORY_DUMP_TARGETS', 'VICTORY_WAVE_WIDE') {
   Remove-Item "Env:$v" -ErrorAction SilentlyContinue
 }
-# Two wave64 compute programs in the wave-wide form; without it a 32-lane driver refuses them and their passes are
-# skipped. Never VICTORY_WAVE_WIDE=1 (every program): it degrades the picture.
-$env:VICTORY_WAVE_WIDE_ONLY = '2cc4c197,369cbe90'
+# Two wave64 compute programs the driver refuses as 64-lane waves (particle visibility, reflection tiling) run in
+# the wave-wide form with '2cc4c197,369cbe90' here, at ~45 ms more GPU time a frame and with larger stripes on lit
+# clothing (run z68): left empty. Never VICTORY_WAVE_WIDE=1 (every program): it degrades the picture.
+$env:VICTORY_WAVE_WIDE_ONLY = ''
 # fxceless's scheduling switches (its README): submission on its own thread, a second copy queue, indirect-draw
 # windows, textures without waiting, gathered indirect records.
 $env:VICTORY_ASYNC_SUBMIT = '1'

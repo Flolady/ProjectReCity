@@ -1,3 +1,44 @@
+diff --git a/apps/victory/src/translate.rs b/apps/victory/src/translate.rs
+index 640d210..64deebd 100644
+--- a/apps/victory/src/translate.rs
++++ b/apps/victory/src/translate.rs
+@@ -474,6 +474,19 @@ fn translate(
+     }
+ }
+ 
++/// `VICTORY_WAVE_WIDE_ONLY`'s hash prefixes.
++fn wide_only() -> &'static [String] {
++    static ONLY: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
++    ONLY.get_or_init(|| {
++        std::env::var("VICTORY_WAVE_WIDE_ONLY")
++            .unwrap_or_default()
++            .split(',')
++            .map(|h| h.trim().to_lowercase())
++            .filter(|h| !h.is_empty())
++            .collect()
++    })
++}
++
+ fn translate_programs(container: &Container, programs: Vec<NativeProgram>, example: &dyn Fn() -> String, t: &mut Tally, checks: &mut Checks) {
+     for p in programs {
+         t.programs += 1;
+@@ -538,7 +551,15 @@ fn translate_programs(container: &Container, programs: Vec<NativeProgram>, examp
+                 if let (Some(r), Some(i), Some(s)) = (res, raised, structured) {
+                     let label = || format!("{} {:?}", example(), p.stage);
+                     *counter(t, p.stage, 0) += 1;
+-                    match emit::emit(container, &p, &program, &s, &i, &r) {
++                    // `VICTORY_WAVE_WIDE_ONLY=<hash prefix>,...`: as the GPU layer does, the
++                    // wave-wide form for the named containers (`#hash` in the example line).
++                    let wide = wide_only().iter().any(|o| example().contains(&format!("#{o}")));
++                    let emitted = if wide {
++                        emit::with_wide(|| emit::emit(container, &p, &program, &s, &i, &r))
++                    } else {
++                        emit::emit(container, &p, &program, &s, &i, &r)
++                    };
++                    match emitted {
+                         Ok(shader) => {
+                             census_line(&label(), &p, &program, &shader);
+                             *counter(t, p.stage, 1) += 1;
 diff --git a/crates/victory-gpu/src/capture.rs b/crates/victory-gpu/src/capture.rs
 index 64695fe..4f9b1e6 100644
 --- a/crates/victory-gpu/src/capture.rs
@@ -514,6 +555,70 @@ index 84009e5..6a9c867 100644
          && plane.count > 0
          && !plane.resources.is_null()
          // SAFETY: the plane lists `count` resources.
+diff --git a/crates/victory-gpu/src/shader_cache.rs b/crates/victory-gpu/src/shader_cache.rs
+index c5365c4..83318c4 100644
+--- a/crates/victory-gpu/src/shader_cache.rs
++++ b/crates/victory-gpu/src/shader_cache.rs
+@@ -74,9 +74,41 @@ fn build() -> [u8; 32] {
+     }
+     h.update(&victory_shader::emit::translation_fingerprint());
+     h.update(include_bytes!("shader_cache.rs"));
++    // Which programs get the wave-wide form ([`wide_only`]).
++    for prefix in wide_only() {
++        h.update(prefix.as_bytes());
++        h.update(b",");
++    }
+     *h.finalize().as_bytes()
+ }
+ 
++/// `VICTORY_WAVE_WIDE_ONLY=<hash prefix>,...`: the wave-wide form of a
++/// console wave64 program for those shaders only (the hash the log names
++/// them by), not for every one as `VICTORY_WAVE_WIDE=1` does.
++fn wide_only() -> &'static [String] {
++    static ONLY: OnceLock<Vec<String>> = OnceLock::new();
++    ONLY.get_or_init(|| {
++        std::env::var("VICTORY_WAVE_WIDE_ONLY")
++            .unwrap_or_default()
++            .split(',')
++            .map(|h| h.trim().to_lowercase())
++            .filter(|h| !h.is_empty())
++            .collect()
++    })
++}
++
++/// Translates one container, in the wave-wide form if [`wide_only`] names it.
++fn translate_one(c: &[u8]) -> Result<HostShader, String> {
++    let only = wide_only();
++    if !only.is_empty() {
++        let hash = blake3::hash(c).to_hex()[..16].to_owned();
++        if only.iter().any(|o| hash.starts_with(o.as_str())) {
++            return victory_shader::emit::with_wide(|| victory_shader::emit::translate(c)).map_err(|e| e.to_string());
++        }
++    }
++    victory_shader::emit::translate(c).map_err(|e| e.to_string())
++}
++
+ /// The offline warm-up (`victory translate --warm`): `container` is
+ /// translated into the cache unless it is there already. `Ok(true)`: it
+ /// was translated now. Needs [`use_shader_cache`] and the same host facts
+@@ -86,7 +118,7 @@ pub fn warm(container: &[u8]) -> Result<bool, String> {
+     let ran = AtomicBool::new(false);
+     let translate = |c: &[u8]| {
+         ran.store(true, Ordering::Relaxed);
+-        victory_shader::emit::translate(c).map_err(|e| e.to_string())
++        translate_one(c)
+     };
+     cached(cache, &build(), container, translate).map(|_| ran.load(Ordering::Relaxed))
+ }
+@@ -94,7 +126,7 @@ pub fn warm(container: &[u8]) -> Result<bool, String> {
+ /// The translation of a console shader container, from the cache when
+ /// there is one.
+ pub(crate) fn host_shader(container: &[u8]) -> Result<HostShader, String> {
+-    let translate = |c: &[u8]| victory_shader::emit::translate(c).map_err(|e| e.to_string());
++    let translate = translate_one;
+     match CACHE.get() {
+         Some(cache) => cached(cache, &build(), container, translate),
+         None => translate(container),
 diff --git a/crates/victory-gpu/src/shadow.rs b/crates/victory-gpu/src/shadow.rs
 index bb9d802..b94ae5e 100644
 --- a/crates/victory-gpu/src/shadow.rs

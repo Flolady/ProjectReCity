@@ -33,7 +33,7 @@ From [Zettrox/ztrx](https://github.com/Zettrox/ztrx) and our own work (NVIDIA, 3
 
 - **Wave64 programs on 32-lane hosts.** The host's wave width is read from `D3D12_FEATURE_D3D12_OPTIONS1` and the
   translator lowers console wave64 code to it (lane exchanges across the two halves, the first-half rule of
-  `v_fma_mix*` and interpolation). `VICTORY_WAVE_WIDE_ONLY=<hash>,...` gives a chosen program the "wave-wide" form
+  `v_fma_mix*` and interpolation). `VICTORY_WAVE_WIDE_ONLY=<hash>,...` (wired again by the last commit) gives a chosen program the "wave-wide" form
   (branches taken by the whole wave with group barriers); a guard refuses that form for a branch inside a loop.
   The shader cache key includes the host width and these switches.
 - **Physical page aliases.** The title maps the same pages at two addresses; writes seen at one now invalidate the
@@ -70,7 +70,7 @@ Translation of the whole shader pack (`victory translate --list --validate --pip
 | Programs | ztrx | this patch |
 |---|---|---|
 | Vertex / pixel: emitted / validated by `dxil.dll` | 14,164 / 14,053 | 14,199 / 14,088 |
-| Compute: pipelines created / emitted | 2,646 / 2,672 | 2,674 / 2,674 |
+| Compute: emitted / validated by `dxil.dll` (not pipelines created) | 2,672 | 2,674 / 2,674 |
 | Mesh: emitted / validated | 8,762 / 8,657 | 8,762 / 8,657 |
 
 Seen on screen: hair drawn in strands instead of blocks (quad reads), characters in colour, sky and haze right.
@@ -88,6 +88,7 @@ Same machine, warm cache, frames of 3,000 draws or more after the first ten in t
 | z57 | `VICTORY_JOIN_PARTS=1 VICTORY_BACK_OWN_VIEW=1 VICTORY_CARD_REHASH_RUNS=1` | 5.8 | 173 | 37.4 | 60 ms | 49 ms |
 | z58 | z57's and `VICTORY_WIDE_REFRESH=1` (**now in `Launch.ps1`**) | 5.9 | 170 | **35.4** | 62 ms | 54 ms |
 | z59 | z58's, `--console series-s` | 6.8 | 146 | 32.9 | 36 ms | 32 ms |
+| z68 | z58's with `VICTORY_WAVE_WIDE_ONLY` wired (two more compute programs run) | 4.2 | 241 | 49.2 | 108 ms | 49 ms |
 
 - **z57 + z58: about 10 % less time per draw**, from four switches that are in the fork but off by default
   (fxceless measured the first three; `VICTORY_WIDE_REFRESH`, a submission's refreshes on several threads, had no
@@ -119,15 +120,22 @@ is no gain and no loss.
 
 ## Still wrong
 
-- **Horizontal stripes on lit clothing.** Render-target dumps put them in the normals target of the G-buffer
-  (albedo and depth are clean), written by the deferred character material shaders, which use only
-  implicit-derivative sampling. Cause not found. Ruled out: derivatives taken under divergent control flow (in
-  the emitted DXIL of one of them, all 34 implicit-derivative operations sit in code every lane runs, with no
-  branch at all).
+- **Horizontal stripes on lit clothing.** A CORRECTION: the bands seen earlier in the normals target are its
+  packed encoding, not the defect. The defect is in the **sun shadow mask** (a 2560x1440 target written by the
+  tiled cascade-shadow compute programs, `CS_ShadowRenderTiled*`): isolated rows read fully shadowed, about two of
+  every eight rows, which the lighting then turns into stripes. These programs are 16x16 groups of four console
+  waves, lowered to 32-lane host waves. Ruled out so far: the three of seventeen that take the approximate
+  "local waves" form (the stripes stay with `VICTORY_WAVE_LOCAL=idiom`, run z67), barriers in branches (the
+  emitted program has no branch), shared memory read out of range. Cause not found.
 - **Grainy courtyard** in some runs, not tied to a cause.
-- **`VICTORY_WAVE_WIDE_ONLY`**: the two compute programs it names (a reflection tiling pass and a particle
-  visibility pass) now run instead of being refused, but a visual effect is not shown: the scene differs from run to
-  run at the same second. `VICTORY_WAVE_WIDE=1` for every program degrades the picture; do not use it.
+- **`VICTORY_WAVE_WIDE_ONLY`**: A CORRECTION: up to the patch's last commit it was not wired in this build, and the
+  two programs it named were refused by the driver in every run here (the earlier claim that they ran was wrong).
+  It is wired now (shader cache and `victory translate`). With it, the particle visibility and reflection tiling
+  programs run (run z68: 10 minutes, no device loss) but the GPU part grows from 62 to 107 ms a frame (5.9 to 4.2
+  fps) and the stripes on lit clothing cover more of it. `Launch.ps1` leaves it empty. Four other compute programs
+  stay refused: they are emitted as 64-lane waves, which this driver refuses, because their lane exchanges sit in
+  loops or in groups of several console waves (`VICTORY_WAVE_WHY=1` lists why). `VICTORY_WAVE_WIDE=1` for every
+  program degrades the picture; do not use it.
 - Ray-traced effects stay off (the acceleration-structure builder writes past the windows it names).
 
 ## Credits
