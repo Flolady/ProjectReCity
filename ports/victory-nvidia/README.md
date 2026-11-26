@@ -135,6 +135,35 @@ settings its own README or launcher gives:
   textures and change nothing, so the rest is not memory pressure. Where the card's time goes is not measured yet.
 - Its first run stays black for minutes while about 900 pipelines are made (cold cache), then draws.
 
+## cool_fox with the PC FidelityFX upscaler: 9 fps with the right picture (2026-11-26)
+
+[`cool_fox-fidelityfx.patch`](cool_fox-fidelityfx.patch) applies to codec_d's cool_fox at `f4b48ad`. It ports
+Marvisak/VIctory's host FidelityFX module (`victory-hle/src/modules/fidelityfx.rs`, `victory-gpu/src/external.rs`,
+the `VICTORY_FIDELITYFX_DIR` setting) into it.
+
+- **Why it matters.** In the Series S profile the title upscales through AMD FidelityFX's console build: six
+  precompiled compute programs, run once a frame. Translated, they took **254 ms of card time a frame** on this
+  RTX 3060 Ti (`VICTORY_GPU_TIMING=1 VICTORY_D3D12_DRED=1`, run z85: 71, 51, 49, 36, 26 and 21 ms), most of the
+  card's 316 ms. With the module, the PC upscaler (FSR 3.1.5 on this card) does the work on the host.
+- **Measured** (runs z80, z89, same settings otherwise):
+
+  | | cool_fox `f4b48ad` | with this patch |
+  |---|---|---|
+  | Frame in the world | 2.6 fps, 392 ms | **9.1 fps, 110 ms** |
+  | ms per 1,000 draws | 88.4 | **24.7** |
+  | Picture | right | right, with colour banding on flat walls |
+
+  8 minutes, no crash, no device loss.
+- **What it needs.** `VICTORY_FIDELITYFX_DIR` naming a folder with AMD's PC `amd_fidelityfx_upscaler_dx12.dll`
+  (the FidelityFX SDK, MIT; many PC games ship it, AMD-signed). Not in this repository. And `VICTORY_THIN` off:
+  with cool_fox's thin lists the title's list has no host list when it calls the upscaler, so the colour input was
+  refused every frame and the picture stayed black (run z87; the patch makes that message name the resource and
+  why).
+- **Still wrong, now and then:** colour banding on flat dark walls, in 2 of 5 runs (z89, z90); runs z91 to z93 show
+  smooth walls at the same scene and times (render-target dumps 600 to 2,400 frames into the world included).
+  Not the stand-in air (z90 without it still banded), not the dispatch's fields (logged in z91: they match the PC
+  3.1 layout, pre-exposure 1.0). Speed over the five runs: 8.8 to 9.2 fps.
+
 ## Still wrong
 
 - **Horizontal stripes on lit clothing.** A CORRECTION: the bands seen earlier in the normals target are its
