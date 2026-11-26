@@ -22,6 +22,13 @@ $env:VICTORY_QUEUE2 = '1'
 $env:VICTORY_INDIRECT_WINDOW = '1'
 $env:VICTORY_TEXTURE_NO_WAIT = '1'
 $env:VICTORY_INDIRECT_GATHER = '1'
+# Measured by fxceless (its README) and checked here (runs z57, z58: 35.4 ms per 1,000 draws against 39.5 without
+# the four): parts of a submission joined, shader writes put back through a view of our own, card hash passes
+# joined, and a submission's refreshes spread over several threads.
+$env:VICTORY_JOIN_PARTS = '1'
+$env:VICTORY_BACK_OWN_VIEW = '1'
+$env:VICTORY_CARD_REHASH_RUNS = '1'
+$env:VICTORY_WIDE_REFRESH = '1'
 $env:VICTORY_GAME_DIR = $Game
 $env:VICTORY_CACHE_DIR = Join-Path $Work 'cache'
 $env:VICTORY_DATA_DIR = Join-Path $Work 'data'

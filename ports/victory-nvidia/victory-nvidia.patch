@@ -434,10 +434,47 @@ index c256367..7fe3e90 100644
      }
      let key = std::ptr::from_ref(heap) as usize;
 diff --git a/crates/victory-gpu/src/queue.rs b/crates/victory-gpu/src/queue.rs
-index 84009e5..16f3b2d 100644
+index 84009e5..6a9c867 100644
 --- a/crates/victory-gpu/src/queue.rs
 +++ b/crates/victory-gpu/src/queue.rs
-@@ -1263,6 +1263,21 @@ pub(crate) fn presented() -> u64 {
+@@ -146,7 +146,7 @@ fn send_behind(this: This, planes: u32, plane_parameters: *const Plane) -> bool
+         return false;
+     }
+     // SAFETY: the title passes `planes` plane descriptions.
+-    let Some(plane) = (unsafe { plane_parameters.as_ref() }) else {
++    let Some(plane) = (unsafe { shown_plane(planes, plane_parameters).as_ref() }) else {
+         return false;
+     };
+     if plane.count == 0 || plane.resources.is_null() {
+@@ -1103,6 +1103,27 @@ pub(crate) struct Plane {
+     count: u32,
+     resources: *const This,
+ }
++
++/// Bytes from one present plane's description to the next.
++const PLANE_STRIDE: usize = 0x48;
++
++/// The plane shown of the `planes` the title presents: plane
++/// `VICTORY_PRESENT_PLANE` (0 by default), or the last one if there are
++/// fewer. In the Series S profile the title presents two planes (the game
++/// and its interface over it), and the first alone stayed black.
++fn shown_plane(planes: u32, plane_parameters: *const Plane) -> *const Plane {
++    static WANT: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
++    let want = *WANT.get_or_init(|| std::env::var("VICTORY_PRESENT_PLANE").ok().and_then(|v| v.trim().parse().ok()).unwrap_or(0));
++    static SAID: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
++    if planes > 1 && SAID.swap(planes, Ordering::Relaxed) != planes {
++        tracing::info!(planes, shown = want.min(planes - 1), "the title presents several planes (VICTORY_PRESENT_PLANE picks the one shown)");
++    }
++    if planes == 0 || plane_parameters.is_null() {
++        return plane_parameters;
++    }
++    let index = want.min(planes - 1) as usize;
++    plane_parameters.cast::<u8>().wrapping_add(index * PLANE_STRIDE).cast()
++}
+ /// Submission tagged with the frame it belongs to `(count, lists, frame
+ /// token, flags)`; frames are paced elsewhere, so it runs as a plain one.
+ extern "system" fn execute_x(this: This, count: u32, lists: *const This, _token: u64, _flags: u32) {
+@@ -1263,6 +1284,21 @@ pub(crate) fn presented() -> u64 {
      FRAMES.load(Ordering::Relaxed)
  }
  
@@ -459,7 +496,7 @@ index 84009e5..16f3b2d 100644
  /// Shows the first plane's first resource in our window.
  ///
  /// shortcut: one plane, no scaling or placement, the source expected in
-@@ -1334,6 +1349,8 @@ fn present_now(this: This, planes: u32, plane_parameters: *const Plane) -> HRESU
+@@ -1334,6 +1370,8 @@ fn present_now(this: This, planes: u32, plane_parameters: *const Plane) -> HRESU
              "presents sent behind their queue's line so far (VICTORY_ASYNC_PRESENT=1); the others ran the old way"
          );
      }
@@ -468,6 +505,15 @@ index 84009e5..16f3b2d 100644
      if frame.is_power_of_two() {
          let (draws, dispatches) = crate::list::take_counts();
          #[cfg(windows)]
+@@ -1373,7 +1411,7 @@ fn present_now(this: This, planes: u32, plane_parameters: *const Plane) -> HRESU
+     if !sent_behind
+         && planes > 0
+         // SAFETY: the title passes `planes` plane descriptions.
+-        && let Some(plane) = unsafe { plane_parameters.as_ref() }
++        && let Some(plane) = unsafe { shown_plane(planes, plane_parameters).as_ref() }
+         && plane.count > 0
+         && !plane.resources.is_null()
+         // SAFETY: the plane lists `count` resources.
 diff --git a/crates/victory-gpu/src/shadow.rs b/crates/victory-gpu/src/shadow.rs
 index bb9d802..b94ae5e 100644
 --- a/crates/victory-gpu/src/shadow.rs
