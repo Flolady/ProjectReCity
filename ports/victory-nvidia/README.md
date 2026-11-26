@@ -124,9 +124,17 @@ is no gain and no loss.
   packed encoding, not the defect. The defect is in the **sun shadow mask** (a 2560x1440 target written by the
   tiled cascade-shadow compute programs, `CS_ShadowRenderTiled*`): isolated rows read fully shadowed, about two of
   every eight rows, which the lighting then turns into stripes. These programs are 16x16 groups of four console
-  waves, lowered to 32-lane host waves. Ruled out so far: the three of seventeen that take the approximate
-  "local waves" form (the stripes stay with `VICTORY_WAVE_LOCAL=idiom`, run z67), barriers in branches (the
-  emitted program has no branch), shared memory read out of range. Cause not found.
+  waves, lowered to 32-lane host waves. At the striped pixels a second target the same program writes is intact,
+  so the threads run and store a wrong value. The defect is **intermittent**: the same build and switches gave a
+  clean picture in one run (z71) and heavy bands in the next (z76), which points at a race between threads.
+  A CORRECTION: an earlier note here said the emitted program has no branch; the parser that said so missed the
+  disassembler's block labels. The emitted program has 34 conditional branches, and 4 of its 19 group barriers sit
+  in blocks that not every console wave of the group runs; on this card a group barrier counts every wave's
+  arrival, so two console waves on different paths can pair one's half with the other's. A translator rule that
+  refuses such placements (kept out of this patch until a run shows it helps) leaves the shader pack's counts
+  unchanged. Ruled out so far: the approximate "local waves" form of three of the programs (run z67), the
+  translated code's clean-up passes (`VICTORY_SHADER_OPT=0`, run z70), shared memory read out of range.
+  Cause not settled.
 - **Grainy courtyard** in some runs, not tied to a cause.
 - **`VICTORY_WAVE_WIDE_ONLY`**: A CORRECTION: up to the patch's last commit it was not wired in this build, and the
   two programs it named were refused by the driver in every run here (the earlier claim that they ran was wrong).
