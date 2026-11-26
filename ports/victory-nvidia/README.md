@@ -159,8 +159,10 @@ the `VICTORY_FIDELITYFX_DIR` setting) into it.
   with cool_fox's thin lists the title's list has no host list when it calls the upscaler, so the colour input was
   refused every frame and the picture stayed black (run z87; the patch makes that message name the resource and
   why).
-- **Still wrong:** colour banding on flat walls, and characters look smoothed; the upscaler's exposure or dynamic
-  range settings are the first thing to check.
+- **Still wrong, now and then:** colour banding on flat dark walls, in 2 of 5 runs (z89, z90); runs z91 to z93 show
+  smooth walls at the same scene and times (render-target dumps 600 to 2,400 frames into the world included).
+  Not the stand-in air (z90 without it still banded), not the dispatch's fields (logged in z91: they match the PC
+  3.1 layout, pre-exposure 1.0). Speed over the five runs: 8.8 to 9.2 fps.
 
 ## Still wrong
 
