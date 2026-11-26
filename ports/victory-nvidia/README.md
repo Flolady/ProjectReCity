@@ -118,6 +118,23 @@ is no gain and no loss.
 - **What would move the frame**: less work per submission on that one thread (fewer or cheaper write-watch and
   guard calls, or the work spread over more threads). Not done yet.
 
+## Other forks on the same machine (2026-11-26)
+
+Same PC (RTX 3060 Ti 8 GB, driver 616.92, 16 GB RAM), each fork built from source at the revision named, with the
+settings its own README or launcher gives:
+
+| Fork | Settings | Picture | Frame in the world |
+|---|---|---|---|
+| this patch (run z76) | `Launch.ps1`, Series X | stripes on lit clothing in most runs (intermittent) | **~5.8 fps, 172 ms** (GPU part 59 ms) |
+| DexNom RayTime `64bd58f` (z77) | its NVIDIA notes: `VICTORY_RAY_TRACING=0 VICTORY_FSR_4K=0 VICTORY_AMBIENT_FALLBACK=1` | not reached | 0-0.1 fps; commit ran to the limit, stopped at 242 s |
+| codec_d's cool_fox `f4b48ad` (z78-z82) | its `pareto-residency` launcher, Series S | **right**: the Series S picture shows (two planes composed), no stripes on clothing in two runs, hair lit, stand-in light in the shade | 2.6 fps, 377-392 ms (GPU part 236-316 ms) |
+
+- cool_fox spends far less on the CPU side (copies 13 ms a frame against 57) and far more on the card. Its stand-in
+  light (`VICTORY_AMBIENT`, `VICTORY_AMBIENT_AIR`) costs about 80 ms of it (run z82 without: 236 ms against 316);
+  smaller video-memory budgets (`VICTORY_MEMORY_CARD_MB=1024 VICTORY_TEXTURE_ROOM_PERCENT=80`, run z81) halve its
+  textures and change nothing, so the rest is not memory pressure. Where the card's time goes is not measured yet.
+- Its first run stays black for minutes while about 900 pipelines are made (cold cache), then draws.
+
 ## Still wrong
 
 - **Horizontal stripes on lit clothing.** A CORRECTION: the bands seen earlier in the normals target are its
